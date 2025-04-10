@@ -1,5 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Clip, ShaderEffect, shaderEffects } from "./utils";
+import {
+  Clip,
+  getTextureCoordinates,
+  ShaderEffect,
+  shaderEffects,
+} from "./utils";
 
 const vertexShaderSource = `
   attribute vec2 a_position;
@@ -126,15 +131,45 @@ const App = () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
-
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-
     const gl = canvas.getContext("webgl");
     if (!gl) {
       console.error("WebGL not supported.");
       return;
     }
+
+    // Set up full-screen quad positions (always the same).
+    const positions = new Float32Array([
+      -1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1,
+    ]);
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+
+    const texCoordBuffer = gl.createBuffer();
+
+    function updateBuffers() {
+      if (!canvas || !gl || !video) return;
+
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      gl.viewport(0, 0, canvas.width, canvas.height);
+
+      const videoWidth = video.videoWidth || 640;
+      const videoHeight = video.videoHeight || 480;
+      const texCoords = getTextureCoordinates(
+        videoWidth,
+        videoHeight,
+        canvas.width,
+        canvas.height
+      );
+      gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, texCoords, gl.STATIC_DRAW);
+    }
+    updateBuffers();
+
+    window.addEventListener("resize", updateBuffers);
+    video.addEventListener("loadedmetadata", updateBuffers);
+
     // Start building your fragment shader
     let fragmentShaderSource = `
       precision mediump float;
@@ -167,6 +202,7 @@ const App = () => {
       }
     }
 
+    // Add effects from the checkboxes.
     Object.entries(activeEffects).forEach(([effect, isActive]) => {
       if (isActive) {
         fragmentShaderSource += `
@@ -174,8 +210,6 @@ const App = () => {
         `;
       }
     });
-
-    // Close the main() function.
     fragmentShaderSource += `
         gl_FragColor = color;
       }
@@ -195,52 +229,23 @@ const App = () => {
     const program = createProgram(gl, vertexShader, fragmentShader);
     gl.useProgram(program);
 
-    const timeUniformLocation = gl.getUniformLocation(program, "u_time");
-
-    // Set Up a Fullscreen Rectangle with Preserved Aspect Ratio
-    const positionBuffer = gl.createBuffer();
+    // (Re)bind the full-screen quad positions to the program.
+    const aPosition = gl.getAttribLocation(program, "a_position");
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    const videoWidth = video.videoWidth || 640;
-    const videoHeight = video.videoHeight || 480;
-    const videoAspect = videoWidth / videoHeight;
-    const canvasAspect = canvas.width / canvas.height;
-    let scaleX = 1,
-      scaleY = 1;
-    if (canvasAspect > videoAspect) {
-      scaleX = videoAspect / canvasAspect;
-    } else {
-      scaleY = canvasAspect / videoAspect;
-    }
-    const positions = new Float32Array([
-      -scaleX,
-      -scaleY,
-      scaleX,
-      -scaleY,
-      -scaleX,
-      scaleY,
-      -scaleX,
-      scaleY,
-      scaleX,
-      -scaleY,
-      scaleX,
-      scaleY,
-    ]);
-    gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
-    const positionLocation = gl.getAttribLocation(program, "a_position");
-    gl.enableVertexAttribArray(positionLocation);
-    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(aPosition);
+    gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
 
-    const texCoordBuffer = gl.createBuffer();
+    // Bind texture coordinates.
+    const aTexCoord = gl.getAttribLocation(program, "a_texCoord");
     gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
-    const texCoords = new Float32Array([0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0]);
-    gl.bufferData(gl.ARRAY_BUFFER, texCoords, gl.STATIC_DRAW);
-    const texCoordLocation = gl.getAttribLocation(program, "a_texCoord");
-    gl.enableVertexAttribArray(texCoordLocation);
-    gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(aTexCoord);
+    gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, false, 0, 0);
 
-    // Create a Texture for the Video Frame
+    const timeUniformLocation = gl.getUniformLocation(program, "u_time");
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, video);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -284,9 +289,14 @@ const App = () => {
       requestAnimationFrame(render);
     }
     render();
+
+    return () => {
+      window.removeEventListener("resize", updateBuffers);
+      video.removeEventListener("loadedmetadata", updateBuffers);
+    };
   }, [activeEffects, inputSource, selectedClipId, clipStartTime]);
 
-  // UI Interaction Handlers
+  // UI Handlers.
   const handleContextMenu = (event: React.MouseEvent) => {
     event.preventDefault();
     setShowPanel((prev) => !prev);
@@ -316,19 +326,15 @@ const App = () => {
         overflow: "hidden",
       }}
     >
-      {/* Fullscreen canvas displaying the processed video feed */}
       <canvas
         ref={canvasRef}
         style={{ width: "100%", height: "100%", display: "block" }}
       />
-      {/* Hidden video element used as the texture source */}
       <video
         ref={videoRef}
         style={{ display: "none" }}
         crossOrigin="anonymous"
       />
-
-      {/* Modal: Appears when right-clicked */}
       {showPanel && (
         <div
           style={{
@@ -343,7 +349,6 @@ const App = () => {
             zIndex: 10,
           }}
         >
-          {/* Dropdown to select video input */}
           <div style={{ marginBottom: "15px" }}>
             <label
               htmlFor="inputSource"
@@ -362,8 +367,6 @@ const App = () => {
               <option value="video">Video File</option>
             </select>
           </div>
-
-          {/* Dropdown to select a Clip */}
           <div style={{ marginBottom: "15px" }}>
             <label
               htmlFor="clipSelect"
@@ -394,8 +397,6 @@ const App = () => {
               ))}
             </select>
           </div>
-
-          {/* Simple effects checkboxes generated from the ShaderEffect enum */}
           <div>
             {Object.values(ShaderEffect).map((effect) => (
               <div key={effect} style={{ marginBottom: "10px" }}>

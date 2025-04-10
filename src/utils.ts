@@ -35,3 +35,52 @@ export const shaderEffects: Record<string, ShaderEffectDefinition> = {
     glsl: "color.rgb *= 0.5 + 0.5 * abs(sin(u_time));",
   },
 };
+
+export function getTextureCoordinates(
+  videoWidth: number,
+  videoHeight: number,
+  canvasWidth: number,
+  canvasHeight: number
+): Float32Array {
+  const videoAspect = videoWidth / videoHeight;
+  const canvasAspect = canvasWidth / canvasHeight;
+  if (videoAspect < canvasAspect) {
+    // Video is "shorter" than the canvas when filling width: crop vertically.
+    const vCrop = (1 - videoAspect / canvasAspect) / 2;
+    return new Float32Array([
+      // Triangle 1
+      0,
+      vCrop, // bottom-left
+      1,
+      vCrop, // bottom-right
+      0,
+      1 - vCrop, // top-left
+      // Triangle 2
+      0,
+      1 - vCrop, // top-left
+      1,
+      vCrop, // bottom-right
+      1,
+      1 - vCrop, // top-right
+    ]);
+  } else {
+    // Video is wider than (or equal to) canvas: crop horizontally.
+    const uCrop = (1 - canvasAspect / videoAspect) / 2;
+    return new Float32Array([
+      // Triangle 1
+      uCrop,
+      0, // bottom-left
+      1 - uCrop,
+      0, // bottom-right
+      uCrop,
+      1, // top-left
+      // Triangle 2
+      uCrop,
+      1, // top-left
+      1 - uCrop,
+      0, // bottom-right
+      1 - uCrop,
+      1, // top-right
+    ]);
+  }
+}
