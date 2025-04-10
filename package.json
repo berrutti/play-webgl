@@ -8,6 +8,7 @@
     "email": "berrutit@gmail.com",
     "url": "https://github.com/berrutti"
   },
+  "homepage": "https://berrutti.github.io/trippy-vids",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
