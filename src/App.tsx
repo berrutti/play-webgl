@@ -91,11 +91,16 @@ const App = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // State for simple effects (checkboxes).
-  const [activeEffects, setActiveEffects] = useState({
-    grayscale: false,
-    invert: false,
-  });
+  const initialActiveEffects = Object.values(ShaderEffect).reduce(
+    (effects, effect) => {
+      effects[effect] = false;
+      return effects;
+    },
+    {} as Record<ShaderEffect, boolean>
+  );
+
+  const [activeEffects, setActiveEffects] =
+    useState<Record<ShaderEffect, boolean>>(initialActiveEffects);
 
   const [showPanel, setShowPanel] = useState(false);
   const [inputSource, setInputSource] = useState("webcam");
@@ -159,7 +164,7 @@ const App = () => {
       }
       varying vec2 v_texCoord;
       void main() {
-      vec4 color = texture2D(u_image, v_texCoord);
+        vec4 color = texture2D(u_image, v_texCoord);
     `;
 
     // If a clip is selected, add its GLSL conditional blocks inside main().
@@ -168,44 +173,49 @@ const App = () => {
       if (selectedClip) {
         selectedClip.instructions.forEach((instruction) => {
           fragmentShaderSource += `
-      if(u_clipTime >= ${instruction.start.toFixed(
-        1
-      )} && u_clipTime <= ${instruction.end.toFixed(1)}) {
-        ${
-          // invert
-          instruction.shaderId === ShaderEffect.INVERT
-            ? "color = vec4(vec3(1.0) - color.rgb, 1.0);"
-            : ""
+        if(u_clipTime >= ${instruction.start.toFixed(
+          1
+        )} && u_clipTime <= ${instruction.end.toFixed(1)}) {
+          ${
+            // invert
+            instruction.shaderId === ShaderEffect.INVERT
+              ? "color = vec4(vec3(1.0) - color.rgb, 1.0);"
+              : ""
+          }
+          ${
+            instruction.shaderId === ShaderEffect.GRAYSCALE
+              ? "color = vec4(vec3(dot(color.rgb, vec3(0.299, 0.587, 0.114))), 1.0);"
+              : ""
+          }
+          ${
+            instruction.shaderId === ShaderEffect.SINE_WAVE
+              ? "color.rgb *= 0.5 + 0.5 * abs(sin(u_time));"
+              : ""
+          }
         }
-        ${
-          instruction.shaderId === ShaderEffect.GRAYSCALE
-            ? "color = vec4(vec3(dot(color.rgb, vec3(0.299, 0.587, 0.114))), 1.0);"
-            : ""
-        }
-        ${
-          instruction.shaderId === ShaderEffect.SINE_WAVE
-            ? "color.rgb *= 0.5 + 0.5 * abs(sin(u_time));"
-            : ""
-        }
-      }
           `;
         });
       }
     }
 
-    // Always apply the simple dropdown effects afterward.
-    if (activeEffects.grayscale) {
+    // Always apply the simple checkbox effects afterward.
+    if (activeEffects[ShaderEffect.GRAYSCALE]) {
       fragmentShaderSource += `
       color = vec4(vec3(dot(color.rgb, vec3(0.299, 0.587, 0.114))), 1.0);
       `;
     }
-    if (activeEffects.invert) {
+    if (activeEffects[ShaderEffect.INVERT]) {
       fragmentShaderSource += `
       color = vec4(vec3(1.0) - color.rgb, 1.0);
       `;
     }
+    if (activeEffects[ShaderEffect.SINE_WAVE]) {
+      fragmentShaderSource += `
+      color.rgb *= 0.5 + 0.5 * abs(sin(u_time));
+      `;
+    }
 
-    // Now close the main() function exactly once.
+    // Close the main() function.
     fragmentShaderSource += `
       gl_FragColor = color;
     }
@@ -230,7 +240,6 @@ const App = () => {
     // Set Up a Fullscreen Rectangle with Preserved Aspect Ratio
     const positionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    // Use the video's natural dimensions for aspect ratio.
     const videoWidth = video.videoWidth || 640;
     const videoHeight = video.videoHeight || 480;
     const videoAspect = videoWidth / videoHeight;
@@ -288,11 +297,9 @@ const App = () => {
           gl.UNSIGNED_BYTE,
           video
         );
-        // Update u_time uniform
         if (timeUniformLocation) {
           gl.uniform1f(timeUniformLocation, performance.now() / 1000);
         }
-        // If u_clipTime exists, update it using the elapsed time mod clip duration.
         if (selectedClipId && clipStartTime !== null) {
           const selectedClip = demoClips.find(
             (clip) => clip.id === selectedClipId
@@ -319,16 +326,16 @@ const App = () => {
     render();
   }, [activeEffects, inputSource, selectedClipId, clipStartTime]);
 
-  // UI Interactions
+  // UI Interaction Handlers
   const handleContextMenu = (event: React.MouseEvent) => {
     event.preventDefault();
     setShowPanel((prev) => !prev);
   };
 
-  const handleCheckboxChange = (effectName: "grayscale" | "invert") => {
+  const handleCheckboxChange = (effect: ShaderEffect) => {
     setActiveEffects((prev) => ({
       ...prev,
-      [effectName]: !prev[effectName],
+      [effect]: !prev[effect],
     }));
   };
 
@@ -393,11 +400,10 @@ const App = () => {
             >
               <option value="webcam">Webcam</option>
               <option value="video">Video File</option>
-              <option value="iphone">iPhone</option>
             </select>
           </div>
 
-          {/* Dropdown to select a Clip or effects */}
+          {/* Dropdown to select a Clip */}
           <div style={{ marginBottom: "15px" }}>
             <label
               htmlFor="clipSelect"
@@ -429,34 +435,28 @@ const App = () => {
             </select>
           </div>
 
-          {/* Simple effects checkboxes */}
-          <div style={{ marginBottom: "10px" }}>
-            <input
-              type="checkbox"
-              id="grayscale"
-              checked={activeEffects.grayscale}
-              onChange={() => handleCheckboxChange("grayscale")}
-            />
-            <label
-              htmlFor="grayscale"
-              style={{ fontSize: "20px", color: "black", marginLeft: "8px" }}
-            >
-              GRAYSCALE
-            </label>
-          </div>
+          {/* Simple effects checkboxes generated from the ShaderEffect enum */}
           <div>
-            <input
-              type="checkbox"
-              id="invert"
-              checked={activeEffects.invert}
-              onChange={() => handleCheckboxChange("invert")}
-            />
-            <label
-              htmlFor="invert"
-              style={{ fontSize: "20px", color: "black", marginLeft: "8px" }}
-            >
-              INVERT
-            </label>
+            {Object.values(ShaderEffect).map((effect) => (
+              <div key={effect} style={{ marginBottom: "10px" }}>
+                <input
+                  type="checkbox"
+                  id={effect}
+                  checked={activeEffects[effect]}
+                  onChange={() => handleCheckboxChange(effect)}
+                />
+                <label
+                  htmlFor={effect}
+                  style={{
+                    fontSize: "20px",
+                    color: "black",
+                    marginLeft: "8px",
+                  }}
+                >
+                  {effect.toUpperCase()}
+                </label>
+              </div>
+            ))}
           </div>
         </div>
       )}
