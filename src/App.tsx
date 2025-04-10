@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Clip, ShaderEffect, shaderEffects } from "./utils";
 
 const vertexShaderSource = `
   attribute vec2 a_position;
@@ -45,44 +46,26 @@ function createProgram(
   return program;
 }
 
-enum ShaderEffect {
-  INVERT = "invert",
-  GRAYSCALE = "grayscale",
-  SINE_WAVE = "sineWave",
-}
-
-interface ShaderInstruction {
-  shaderId: ShaderEffect;
-  start: number;
-  end: number;
-}
-
-interface Clip {
-  id: string;
-  name: string;
-  instructions: ShaderInstruction[];
-}
-
 const demoClips: Clip[] = [
   {
     id: "clip1",
     name: "Clip 1",
     instructions: [
-      { shaderId: ShaderEffect.GRAYSCALE, start: 0, end: 5 },
-      { shaderId: ShaderEffect.INVERT, start: 3, end: 8 },
+      { effect: ShaderEffect.GRAYSCALE, start: 0, end: 5 },
+      { effect: ShaderEffect.INVERT, start: 3, end: 8 },
     ],
   },
   {
     id: "clip2",
     name: "Clip 2",
-    instructions: [{ shaderId: ShaderEffect.SINE_WAVE, start: 0, end: 10 }],
+    instructions: [{ effect: ShaderEffect.SINE_WAVE, start: 0, end: 10 }],
   },
   {
     id: "clip3",
     name: "Clip 3",
     instructions: [
-      { shaderId: ShaderEffect.INVERT, start: 1, end: 2 },
-      { shaderId: ShaderEffect.INVERT, start: 3, end: 4 },
+      { effect: ShaderEffect.INVERT, start: 1, end: 2 },
+      { effect: ShaderEffect.INVERT, start: 3, end: 4 },
     ],
   },
 ];
@@ -144,7 +127,6 @@ const App = () => {
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
 
-    // Set canvas dimensions from window size.
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
@@ -153,6 +135,7 @@ const App = () => {
       console.error("WebGL not supported.");
       return;
     }
+    // Start building your fragment shader
     let fragmentShaderSource = `
       precision mediump float;
       uniform sampler2D u_image;
@@ -167,61 +150,38 @@ const App = () => {
         vec4 color = texture2D(u_image, v_texCoord);
     `;
 
-    // If a clip is selected, add its GLSL conditional blocks inside main().
+    // For each clip instruction, attach its definition
     if (selectedClipId && clipStartTime !== null) {
       const selectedClip = demoClips.find((clip) => clip.id === selectedClipId);
       if (selectedClip) {
         selectedClip.instructions.forEach((instruction) => {
+          const effectGlsl = shaderEffects[instruction.effect].glsl;
           fragmentShaderSource += `
         if(u_clipTime >= ${instruction.start.toFixed(
           1
         )} && u_clipTime <= ${instruction.end.toFixed(1)}) {
-          ${
-            // invert
-            instruction.shaderId === ShaderEffect.INVERT
-              ? "color = vec4(vec3(1.0) - color.rgb, 1.0);"
-              : ""
-          }
-          ${
-            instruction.shaderId === ShaderEffect.GRAYSCALE
-              ? "color = vec4(vec3(dot(color.rgb, vec3(0.299, 0.587, 0.114))), 1.0);"
-              : ""
-          }
-          ${
-            instruction.shaderId === ShaderEffect.SINE_WAVE
-              ? "color.rgb *= 0.5 + 0.5 * abs(sin(u_time));"
-              : ""
-          }
+          ${effectGlsl}
         }
           `;
         });
       }
     }
 
-    // Always apply the simple checkbox effects afterward.
-    if (activeEffects[ShaderEffect.GRAYSCALE]) {
-      fragmentShaderSource += `
-      color = vec4(vec3(dot(color.rgb, vec3(0.299, 0.587, 0.114))), 1.0);
-      `;
-    }
-    if (activeEffects[ShaderEffect.INVERT]) {
-      fragmentShaderSource += `
-      color = vec4(vec3(1.0) - color.rgb, 1.0);
-      `;
-    }
-    if (activeEffects[ShaderEffect.SINE_WAVE]) {
-      fragmentShaderSource += `
-      color.rgb *= 0.5 + 0.5 * abs(sin(u_time));
-      `;
-    }
+    Object.entries(activeEffects).forEach(([effect, isActive]) => {
+      if (isActive) {
+        fragmentShaderSource += `
+          ${shaderEffects[effect].glsl}
+        `;
+      }
+    });
 
     // Close the main() function.
     fragmentShaderSource += `
-      gl_FragColor = color;
-    }
+        gl_FragColor = color;
+      }
     `;
 
-    // Compile shaders and create the shader program
+    // Compile shaders and create the program
     const vertexShader = compileShader(
       gl,
       vertexShaderSource,
