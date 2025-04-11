@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Clip,
+  clips,
   getTextureCoordinates,
   ShaderEffect,
   shaderEffects,
 } from "./utils";
+import ControlPanel from "./ControlPanel";
 
 const vertexShaderSource = `
   attribute vec2 a_position;
@@ -50,30 +51,6 @@ function createProgram(
   }
   return program;
 }
-
-const demoClips: Clip[] = [
-  {
-    id: "clip1",
-    name: "Clip 1",
-    instructions: [
-      { effect: ShaderEffect.GRAYSCALE, start: 0, end: 5 },
-      { effect: ShaderEffect.INVERT, start: 3, end: 8 },
-    ],
-  },
-  {
-    id: "clip2",
-    name: "Clip 2",
-    instructions: [{ effect: ShaderEffect.SINE_WAVE, start: 0, end: 10 }],
-  },
-  {
-    id: "clip3",
-    name: "Clip 3",
-    instructions: [
-      { effect: ShaderEffect.INVERT, start: 1, end: 2 },
-      { effect: ShaderEffect.INVERT, start: 3, end: 4 },
-    ],
-  },
-];
 
 const App = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -187,7 +164,7 @@ const App = () => {
 
     // For each clip instruction, attach its definition
     if (selectedClipId && clipStartTime !== null) {
-      const selectedClip = demoClips.find((clip) => clip.id === selectedClipId);
+      const selectedClip = clips.find((clip) => clip.id === selectedClipId);
       if (selectedClip) {
         selectedClip.instructions.forEach((instruction) => {
           const effectGlsl = shaderEffects[instruction.effect].glsl;
@@ -266,9 +243,7 @@ const App = () => {
           gl.uniform1f(timeUniformLocation, performance.now() / 1000);
         }
         if (selectedClipId && clipStartTime !== null) {
-          const selectedClip = demoClips.find(
-            (clip) => clip.id === selectedClipId
-          );
+          const selectedClip = clips.find((clip) => clip.id === selectedClipId);
           if (selectedClip) {
             const clipDuration = Math.max(
               ...selectedClip.instructions.map((inst) => inst.end)
@@ -309,10 +284,8 @@ const App = () => {
     }));
   };
 
-  const handleInputSourceChange = (
-    event: React.ChangeEvent<HTMLSelectElement>
-  ) => {
-    setInputSource(event.target.value);
+  const handleInputSourceChange = (newSource: string) => {
+    setInputSource(newSource);
   };
 
   return (
@@ -341,84 +314,24 @@ const App = () => {
             position: "absolute",
             top: "20px",
             right: "20px",
-            width: "25vw",
-            backgroundColor: "white",
-            padding: "20px",
-            borderRadius: "8px",
-            boxShadow: "0 0 10px rgba(0,0,0,0.5)",
             zIndex: 10,
           }}
         >
-          <div style={{ marginBottom: "15px" }}>
-            <label
-              htmlFor="inputSource"
-              style={{ fontSize: "20px", color: "black" }}
-            >
-              Input Source:
-            </label>
-            <br />
-            <select
-              id="inputSource"
-              value={inputSource}
-              onChange={handleInputSourceChange}
-              style={{ fontSize: "18px", marginTop: "5px", width: "100%" }}
-            >
-              <option value="webcam">Webcam</option>
-              <option value="video">Video File</option>
-            </select>
-          </div>
-          <div style={{ marginBottom: "15px" }}>
-            <label
-              htmlFor="clipSelect"
-              style={{ fontSize: "20px", color: "black" }}
-            >
-              Select Clip:
-            </label>
-            <br />
-            <select
-              id="clipSelect"
-              value={selectedClipId || ""}
-              onChange={(e) => {
-                const newClipId = e.target.value || null;
-                setSelectedClipId(newClipId);
-                if (newClipId) {
-                  setClipStartTime(performance.now() / 1000);
-                } else {
-                  setClipStartTime(null);
-                }
-              }}
-              style={{ fontSize: "18px", marginTop: "5px", width: "100%" }}
-            >
-              <option value="">None</option>
-              {demoClips.map((clip) => (
-                <option key={clip.id} value={clip.id}>
-                  {clip.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            {Object.values(ShaderEffect).map((effect) => (
-              <div key={effect} style={{ marginBottom: "10px" }}>
-                <input
-                  type="checkbox"
-                  id={effect}
-                  checked={activeEffects[effect]}
-                  onChange={() => handleCheckboxChange(effect)}
-                />
-                <label
-                  htmlFor={effect}
-                  style={{
-                    fontSize: "20px",
-                    color: "black",
-                    marginLeft: "8px",
-                  }}
-                >
-                  {effect.toUpperCase()}
-                </label>
-              </div>
-            ))}
-          </div>
+          <ControlPanel
+            inputSource={inputSource}
+            onInputSourceChange={handleInputSourceChange}
+            selectedClipId={selectedClipId}
+            onClipChange={(newClipId) => {
+              setSelectedClipId(newClipId);
+              if (newClipId) {
+                setClipStartTime(performance.now() / 1000);
+              } else {
+                setClipStartTime(null);
+              }
+            }}
+            activeEffects={activeEffects}
+            onToggleEffect={handleCheckboxChange}
+          />
         </div>
       )}
     </div>

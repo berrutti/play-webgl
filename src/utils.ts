@@ -84,3 +84,30 @@ export function getTextureCoordinates(
     ]);
   }
 }
+
+export const clips: Clip[] = [
+  {
+    id: "1",
+    name: "Grayscale then Invert",
+    instructions: [
+      { effect: ShaderEffect.GRAYSCALE, start: 0, end: 5 },
+      { effect: ShaderEffect.INVERT, start: 3, end: 8 },
+    ],
+  },
+  {
+    id: "2",
+    name: "Sine wave 10 seconds",
+    instructions: [
+      { effect: ShaderEffect.SINE_WAVE, start: 0, end: 5 },
+      { effect: ShaderEffect.SINE_WAVE, start: 6, end: 6.1 },
+    ],
+  },
+  {
+    id: "3",
+    name: "Double invert",
+    instructions: [
+      { effect: ShaderEffect.INVERT, start: 1, end: 2 },
+      { effect: ShaderEffect.INVERT, start: 3, end: 4 },
+    ],
+  },
+];
