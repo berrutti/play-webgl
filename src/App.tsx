@@ -336,21 +336,28 @@ const App = () => {
         // update every playing clip's u_clipTime_<id>
         Object.entries(playingClips).forEach(([clipId, isPlaying]) => {
           if (!isPlaying) return;
-          const clipTimeUniformLocation = clipUniformLocations[clipId];
-          const startTime = clipStartTimes[clipId];
-          if (!clipTimeUniformLocation || startTime == null) return;
+          const start = clipStartTimes[clipId];
+          if (start == null) return;
 
-          // compute t, clamped or looped
-          const instructions = clips.find((c) => c.id === clipId)!.instructions;
-          const clipDuration = Math.max(
-            ...instructions.map((instruction) => instruction.end)
-          );
-          const elapsedTime = now / 1000 - startTime;
-          const clipTime = loopClips[clipId]
-            ? elapsedTime % clipDuration
-            : Math.min(elapsedTime, clipDuration);
+          // find clip duration
+          const insts = clips.find((c) => c.id === clipId)!.instructions;
+          const duration = Math.max(...insts.map((i) => i.end));
+          const elapsed = now / 1000 - start;
 
-          webGLContext.uniform1f(clipTimeUniformLocation, clipTime);
+          // if not looping & we've passed the end, stop playing
+          if (!loopClips[clipId] && elapsed >= duration) {
+            setPlayingClips((prev) => ({ ...prev, [clipId]: false }));
+            return;
+          }
+
+          // otherwise compute the time uniform
+          const t = loopClips[clipId]
+            ? elapsed % duration
+            : Math.min(elapsed, duration);
+          const loc = clipUniformLocations[clipId];
+          if (!loc) return;
+
+          webGLContext.uniform1f(loc, t);
         });
 
         webGLContext.drawArrays(webGLContext.TRIANGLES, 0, 6);
