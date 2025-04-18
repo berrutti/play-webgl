@@ -69,8 +69,24 @@ const App = () => {
 
   const [showPanel, setShowPanel] = useState(false);
   const [inputSource, setInputSource] = useState("webcam");
-  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
-  const [clipStartTime, setClipStartTime] = useState<number | null>(null);
+  const [playingClips, setPlayingClips] = useState<Record<string, boolean>>(
+    () =>
+      clips.reduce((acc, clip) => {
+        acc[clip.id] = false;
+        return acc;
+      }, {} as Record<string, boolean>)
+  );
+
+  const [loopClips, setLoopClips] = useState<Record<string, boolean>>(() =>
+    clips.reduce((acc, clip) => {
+      acc[clip.id] = false;
+      return acc;
+    }, {} as Record<string, boolean>)
+  );
+
+  const [clipStartTimes, setClipStartTimes] = useState<Record<string, number>>(
+    {}
+  );
 
   // Input Source Setup
   useEffect(() => {
@@ -162,29 +178,31 @@ const App = () => {
     precision mediump float;
     uniform sampler2D u_image;
     uniform float u_time;
-    ${
-      selectedClipId !== null && clipStartTime !== null
-        ? "uniform float u_clipTime;"
-        : ""
-    }
+    ${Object.entries(playingClips)
+      .map(([clipId, isPlaying]) =>
+        isPlaying ? `uniform float u_clipTime_${clipId};` : ``
+      )
+      .join("\n")}
     varying vec2 v_texCoord;
     void main() {
       vec4 color = texture2D(u_image, v_texCoord);
+          ${Object.entries(playingClips)
+            .filter(([, play]) => play)
+            .map(([clipId]) => {
+              const clip = clips.find((c) => c.id === clipId)!;
+              return clip.instructions
+                .map(
+                  (inst) => `
+        if (u_clipTime_${clipId} >= ${inst.start.toFixed(1)} && 
+            u_clipTime_${clipId} <= ${inst.end.toFixed(1)}) {
+          ${shaderEffects[inst.effect].glsl}
+        }
+      `
+                )
+                .join("\n");
+            })
+            .join("\n")}
   `;
-    if (selectedClipId !== null && clipStartTime !== null) {
-      const selectedClip = clips.find((clip) => clip.id === selectedClipId);
-      if (selectedClip) {
-        selectedClip.instructions.forEach((instruction) => {
-          fragmentShaderSource += `
-          if (u_clipTime >= ${instruction.start.toFixed(
-            1
-          )} && u_clipTime <= ${instruction.end.toFixed(1)}) {
-            ${shaderEffects[instruction.effect].glsl}
-          }
-        `;
-        });
-      }
-    }
     Object.entries(activeEffects).forEach(([effect, isActive]) => {
       if (isActive) {
         fragmentShaderSource += shaderEffects[effect as ShaderEffect].glsl;
@@ -249,10 +267,16 @@ const App = () => {
       shaderProgram,
       "u_time"
     );
-    const clipTimeUniformLocation =
-      selectedClipId !== null && clipStartTime !== null
-        ? webGLContext.getUniformLocation(shaderProgram, "u_clipTime")
-        : null;
+
+    // one u_clipTime_<id> uniform per clip
+    const clipUniformLocations: Record<string, WebGLUniformLocation | null> =
+      {};
+    Object.keys(playingClips).forEach((clipId) => {
+      clipUniformLocations[clipId] = webGLContext.getUniformLocation(
+        shaderProgram,
+        `u_clipTime_${clipId}`
+      );
+    });
 
     // 6) Texture setup + placeholder
     const videoTexture = webGLContext.createTexture()!;
@@ -309,21 +333,25 @@ const App = () => {
         if (timeUniformLocation) {
           webGLContext.uniform1f(timeUniformLocation, now / 1000);
         }
-        if (
-          clipTimeUniformLocation &&
-          selectedClipId !== null &&
-          clipStartTime !== null
-        ) {
-          const selectedClip = clips.find(
-            (clip) => clip.id === selectedClipId
-          )!;
+        // update every playing clip's u_clipTime_<id>
+        Object.entries(playingClips).forEach(([clipId, isPlaying]) => {
+          if (!isPlaying) return;
+          const clipTimeUniformLocation = clipUniformLocations[clipId];
+          const startTime = clipStartTimes[clipId];
+          if (!clipTimeUniformLocation || startTime == null) return;
+
+          // compute t, clamped or looped
+          const instructions = clips.find((c) => c.id === clipId)!.instructions;
           const clipDuration = Math.max(
-            ...selectedClip.instructions.map((inst) => inst.end)
+            ...instructions.map((instruction) => instruction.end)
           );
-          const elapsedTime = now / 1000 - clipStartTime;
-          const clipTime = elapsedTime % clipDuration;
+          const elapsedTime = now / 1000 - startTime;
+          const clipTime = loopClips[clipId]
+            ? elapsedTime % clipDuration
+            : Math.min(elapsedTime, clipDuration);
+
           webGLContext.uniform1f(clipTimeUniformLocation, clipTime);
-        }
+        });
 
         webGLContext.drawArrays(webGLContext.TRIANGLES, 0, 6);
       }
@@ -338,7 +366,7 @@ const App = () => {
       window.removeEventListener("resize", updateBuffers);
       videoElement.removeEventListener("loadedmetadata", updateBuffers);
     };
-  }, [activeEffects, inputSource, selectedClipId, clipStartTime]);
+  }, [activeEffects, inputSource, playingClips, loopClips, clipStartTimes]);
 
   // UI Handlers.
   const handleContextMenu = (event: React.MouseEvent) => {
@@ -351,6 +379,21 @@ const App = () => {
       ...prev,
       [effect]: !prev[effect],
     }));
+  };
+
+  const handlePlayToggle = (clipId: string) => {
+    setPlayingClips((prev) => {
+      const now = performance.now() / 1000;
+      const isNowPlaying = !prev[clipId];
+      if (isNowPlaying) {
+        setClipStartTimes((times) => ({ ...times, [clipId]: now }));
+      }
+      return { ...prev, [clipId]: isNowPlaying };
+    });
+  };
+
+  const handleLoopToggle = (clipId: string) => {
+    setLoopClips((prev) => ({ ...prev, [clipId]: !prev[clipId] }));
   };
 
   const handleInputSourceChange = (newSource: string) => {
@@ -389,15 +432,10 @@ const App = () => {
           <ControlPanel
             inputSource={inputSource}
             onInputSourceChange={handleInputSourceChange}
-            selectedClipId={selectedClipId}
-            onClipChange={(newClipId) => {
-              setSelectedClipId(newClipId);
-              if (newClipId !== null) {
-                setClipStartTime(performance.now() / 1000);
-              } else {
-                setClipStartTime(null);
-              }
-            }}
+            playingClips={playingClips}
+            loopClips={loopClips}
+            onPlayToggle={handlePlayToggle}
+            onLoopToggle={handleLoopToggle}
             activeEffects={activeEffects}
             onToggleEffect={handleCheckboxChange}
           />

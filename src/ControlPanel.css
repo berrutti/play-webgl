@@ -1,44 +1,15 @@
 .control-panel {
   background-color: white;
+  color: black;
   padding: 20px;
   border-radius: 8px;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
   width: 25vw;
-  font-family: sans-serif;
 }
 
-.control-group {
-  margin-bottom: 15px;
-}
-
-.control-label {
-  font-size: 20px;
-  color: #333;
-}
-
-.control-select {
-  font-size: 18px;
-  margin-top: 5px;
-  width: 100%;
-  padding: 5px;
-}
-
-.checkbox-container {
-  display: flex;
-  flex-direction: column;
-}
-
-.checkbox-group {
-  display: flex;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.control-checkbox {
-  margin-right: 8px;
-}
-
-.checkbox-label {
-  font-size: 20px;
-  color: #333;
+.play-button {
+  background: none;
+  border: none;
+  color: black;
+  cursor: pointer;
 }
