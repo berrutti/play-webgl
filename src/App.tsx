@@ -89,7 +89,7 @@ const App = () => {
           videoElement.srcObject = stream;
           return videoElement.play();
         })
-        .catch((err) => console.error("Error accessing webcam:", err));
+        .catch();
     } else if (inputSource === "video") {
       videoElement.pause();
       videoElement.srcObject = null;
@@ -126,7 +126,6 @@ const App = () => {
 
     function updateBuffers() {
       if (!canvas || !gl || !video) return;
-
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
       gl.viewport(0, 0, canvas.width, canvas.height);
@@ -143,7 +142,6 @@ const App = () => {
       gl.bufferData(gl.ARRAY_BUFFER, texCoords, gl.STATIC_DRAW);
     }
     updateBuffers();
-
     window.addEventListener("resize", updateBuffers);
     video.addEventListener("loadedmetadata", updateBuffers);
 
@@ -163,17 +161,16 @@ const App = () => {
     `;
 
     // For each clip instruction, attach its definition
-    if (selectedClipId && clipStartTime !== null) {
+    if (selectedClipId !== null && clipStartTime !== null) {
       const selectedClip = clips.find((clip) => clip.id === selectedClipId);
       if (selectedClip) {
         selectedClip.instructions.forEach((instruction) => {
-          const effectGlsl = shaderEffects[instruction.effect].glsl;
           fragmentShaderSource += `
-        if(u_clipTime >= ${instruction.start.toFixed(
-          1
-        )} && u_clipTime <= ${instruction.end.toFixed(1)}) {
-          ${effectGlsl}
-        }
+            if (u_clipTime >= ${instruction.start.toFixed(
+              1
+            )} && u_clipTime <= ${instruction.end.toFixed(1)}) {
+              ${shaderEffects[instruction.effect].glsl}
+            }
           `;
         });
       }
@@ -181,11 +178,7 @@ const App = () => {
 
     // Add effects from the checkboxes.
     Object.entries(activeEffects).forEach(([effect, isActive]) => {
-      if (isActive) {
-        fragmentShaderSource += `
-          ${shaderEffects[effect].glsl}
-        `;
-      }
+      if (isActive) fragmentShaderSource += shaderEffects[effect].glsl;
     });
     fragmentShaderSource += `
         gl_FragColor = color;
@@ -218,18 +211,45 @@ const App = () => {
     gl.enableVertexAttribArray(aTexCoord);
     gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, false, 0, 0);
 
+    // 5) Uniform locations
     const timeUniformLocation = gl.getUniformLocation(program, "u_time");
-    const texture = gl.createTexture();
+    const clipLocation =
+      selectedClipId !== null && clipStartTime !== null
+        ? gl.getUniformLocation(program, "u_clipTime")
+        : null;
+
+    // 6) Texture setup + empty placeholder
+    const texture = gl.createTexture()!;
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, video);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
 
-    // Rendering Loop
+    // Allocate empty texture now; real video frames go in render()
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGB,
+      canvas.width,
+      canvas.height,
+      0,
+      gl.RGB,
+      gl.UNSIGNED_BYTE,
+      null
+    );
+
+    // 7) Single RAF loop with cancellation
+    let rafId: number;
     function render() {
-      if (video && gl && video.readyState >= 2) {
+      gl?.useProgram(program);
+
+      // Only update + draw when we have a frame
+      if (
+        video &&
+        gl &&
+        video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+      ) {
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.texImage2D(
           gl.TEXTURE_2D,
@@ -242,30 +262,26 @@ const App = () => {
         if (timeUniformLocation) {
           gl.uniform1f(timeUniformLocation, performance.now() / 1000);
         }
-        if (selectedClipId && clipStartTime !== null) {
+        if (clipLocation && selectedClipId !== null && clipStartTime !== null) {
           const selectedClip = clips.find((clip) => clip.id === selectedClipId);
-          if (selectedClip) {
-            const clipDuration = Math.max(
-              ...selectedClip.instructions.map((inst) => inst.end)
-            );
-            const elapsed = performance.now() / 1000 - clipStartTime;
-            const currentClipTime = elapsed % clipDuration;
-            const uClipTimeLocation = gl.getUniformLocation(
-              program,
-              "u_clipTime"
-            );
-            if (uClipTimeLocation) {
-              gl.uniform1f(uClipTimeLocation, currentClipTime);
-            }
-          }
+          if (!selectedClip) return;
+          const clipDuration = Math.max(
+            ...selectedClip.instructions.map((inst) => inst.end)
+          );
+          const elapsed = performance.now() / 1000 - clipStartTime;
+          const currentClipTime = elapsed % clipDuration;
+          gl.uniform1f(clipLocation, currentClipTime);
         }
+
         gl.drawArrays(gl.TRIANGLES, 0, 6);
       }
-      requestAnimationFrame(render);
+
+      rafId = requestAnimationFrame(render);
     }
     render();
 
     return () => {
+      cancelAnimationFrame(rafId);
       window.removeEventListener("resize", updateBuffers);
       video.removeEventListener("loadedmetadata", updateBuffers);
     };
