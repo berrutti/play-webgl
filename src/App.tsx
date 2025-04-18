@@ -105,185 +105,238 @@ const App = () => {
 
   // WebGL Setup & Rendering
   useEffect(() => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas) return;
-    const gl = canvas.getContext("webgl");
-    if (!gl) {
+    const videoElement = videoRef.current;
+    const canvasElement = canvasRef.current;
+    if (!videoElement || !canvasElement) return;
+
+    const webGLContext = canvasElement.getContext("webgl");
+    if (!webGLContext) {
       console.error("WebGL not supported.");
       return;
     }
 
-    // Set up full-screen quad positions (always the same).
-    const positions = new Float32Array([
+    // 1) Full‑screen quad buffer
+    const quadPositions = new Float32Array([
       -1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1,
     ]);
-    const positionBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+    const positionBuffer = webGLContext.createBuffer()!;
+    webGLContext.bindBuffer(webGLContext.ARRAY_BUFFER, positionBuffer);
+    webGLContext.bufferData(
+      webGLContext.ARRAY_BUFFER,
+      quadPositions,
+      webGLContext.STATIC_DRAW
+    );
 
-    const texCoordBuffer = gl.createBuffer();
+    const textureCoordinateBuffer = webGLContext.createBuffer()!;
 
     function updateBuffers() {
-      if (!canvas || !gl || !video) return;
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      gl.viewport(0, 0, canvas.width, canvas.height);
+      if (!canvasElement || !webGLContext || !videoElement) return;
+      canvasElement.width = window.innerWidth;
+      canvasElement.height = window.innerHeight;
+      webGLContext.viewport(0, 0, canvasElement.width, canvasElement.height);
 
-      const videoWidth = video.videoWidth || 640;
-      const videoHeight = video.videoHeight || 480;
-      const texCoords = getTextureCoordinates(
+      const videoWidth = videoElement.videoWidth || 640;
+      const videoHeight = videoElement.videoHeight || 480;
+      const textureCoordinates = getTextureCoordinates(
         videoWidth,
         videoHeight,
-        canvas.width,
-        canvas.height
+        canvasElement.width,
+        canvasElement.height
       );
-      gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, texCoords, gl.STATIC_DRAW);
+      webGLContext.bindBuffer(
+        webGLContext.ARRAY_BUFFER,
+        textureCoordinateBuffer
+      );
+      webGLContext.bufferData(
+        webGLContext.ARRAY_BUFFER,
+        textureCoordinates,
+        webGLContext.STATIC_DRAW
+      );
     }
     updateBuffers();
     window.addEventListener("resize", updateBuffers);
-    video.addEventListener("loadedmetadata", updateBuffers);
+    videoElement.addEventListener("loadedmetadata", updateBuffers);
 
-    // Start building your fragment shader
+    // 2) Build fragment shader source (same as before)
     let fragmentShaderSource = `
-      precision mediump float;
-      uniform sampler2D u_image;
-      uniform float u_time;
-      ${
-        selectedClipId !== null && clipStartTime !== null
-          ? "uniform float u_clipTime;"
-          : ""
-      }
-      varying vec2 v_texCoord;
-      void main() {
-        vec4 color = texture2D(u_image, v_texCoord);
-    `;
-
-    // For each clip instruction, attach its definition
+    precision mediump float;
+    uniform sampler2D u_image;
+    uniform float u_time;
+    ${
+      selectedClipId !== null && clipStartTime !== null
+        ? "uniform float u_clipTime;"
+        : ""
+    }
+    varying vec2 v_texCoord;
+    void main() {
+      vec4 color = texture2D(u_image, v_texCoord);
+  `;
     if (selectedClipId !== null && clipStartTime !== null) {
       const selectedClip = clips.find((clip) => clip.id === selectedClipId);
       if (selectedClip) {
         selectedClip.instructions.forEach((instruction) => {
           fragmentShaderSource += `
-            if (u_clipTime >= ${instruction.start.toFixed(
-              1
-            )} && u_clipTime <= ${instruction.end.toFixed(1)}) {
-              ${shaderEffects[instruction.effect].glsl}
-            }
-          `;
+          if (u_clipTime >= ${instruction.start.toFixed(
+            1
+          )} && u_clipTime <= ${instruction.end.toFixed(1)}) {
+            ${shaderEffects[instruction.effect].glsl}
+          }
+        `;
         });
       }
     }
-
-    // Add effects from the checkboxes.
     Object.entries(activeEffects).forEach(([effect, isActive]) => {
-      if (isActive) fragmentShaderSource += shaderEffects[effect].glsl;
+      if (isActive) {
+        fragmentShaderSource += shaderEffects[effect as ShaderEffect].glsl;
+      }
     });
     fragmentShaderSource += `
-        gl_FragColor = color;
-      }
-    `;
+      gl_FragColor = color;
+    }
+  `;
 
-    // Compile shaders and create the program
+    // 3) Compile & link
     const vertexShader = compileShader(
-      gl,
+      webGLContext,
       vertexShaderSource,
-      gl.VERTEX_SHADER
+      webGLContext.VERTEX_SHADER
     );
     const fragmentShader = compileShader(
-      gl,
+      webGLContext,
       fragmentShaderSource,
-      gl.FRAGMENT_SHADER
+      webGLContext.FRAGMENT_SHADER
     );
-    const program = createProgram(gl, vertexShader, fragmentShader);
-    gl.useProgram(program);
+    const shaderProgram = createProgram(
+      webGLContext,
+      vertexShader,
+      fragmentShader
+    );
+    webGLContext.useProgram(shaderProgram);
 
-    // (Re)bind the full-screen quad positions to the program.
-    const aPosition = gl.getAttribLocation(program, "a_position");
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    gl.enableVertexAttribArray(aPosition);
-    gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
+    // 4) Attributes
+    const positionAttributeLocation = webGLContext.getAttribLocation(
+      shaderProgram,
+      "a_position"
+    );
+    webGLContext.bindBuffer(webGLContext.ARRAY_BUFFER, positionBuffer);
+    webGLContext.enableVertexAttribArray(positionAttributeLocation);
+    webGLContext.vertexAttribPointer(
+      positionAttributeLocation,
+      2,
+      webGLContext.FLOAT,
+      false,
+      0,
+      0
+    );
 
-    // Bind texture coordinates.
-    const aTexCoord = gl.getAttribLocation(program, "a_texCoord");
-    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
-    gl.enableVertexAttribArray(aTexCoord);
-    gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, false, 0, 0);
+    const texCoordAttributeLocation = webGLContext.getAttribLocation(
+      shaderProgram,
+      "a_texCoord"
+    );
+    webGLContext.bindBuffer(webGLContext.ARRAY_BUFFER, textureCoordinateBuffer);
+    webGLContext.enableVertexAttribArray(texCoordAttributeLocation);
+    webGLContext.vertexAttribPointer(
+      texCoordAttributeLocation,
+      2,
+      webGLContext.FLOAT,
+      false,
+      0,
+      0
+    );
 
     // 5) Uniform locations
-    const timeUniformLocation = gl.getUniformLocation(program, "u_time");
-    const clipLocation =
+    const timeUniformLocation = webGLContext.getUniformLocation(
+      shaderProgram,
+      "u_time"
+    );
+    const clipTimeUniformLocation =
       selectedClipId !== null && clipStartTime !== null
-        ? gl.getUniformLocation(program, "u_clipTime")
+        ? webGLContext.getUniformLocation(shaderProgram, "u_clipTime")
         : null;
 
-    // 6) Texture setup + empty placeholder
-    const texture = gl.createTexture()!;
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    // 6) Texture setup + placeholder
+    const videoTexture = webGLContext.createTexture()!;
+    webGLContext.bindTexture(webGLContext.TEXTURE_2D, videoTexture);
+    webGLContext.pixelStorei(webGLContext.UNPACK_FLIP_Y_WEBGL, true);
+    webGLContext.texParameteri(
+      webGLContext.TEXTURE_2D,
+      webGLContext.TEXTURE_WRAP_S,
+      webGLContext.CLAMP_TO_EDGE
+    );
+    webGLContext.texParameteri(
+      webGLContext.TEXTURE_2D,
+      webGLContext.TEXTURE_WRAP_T,
+      webGLContext.CLAMP_TO_EDGE
+    );
+    webGLContext.texParameteri(
+      webGLContext.TEXTURE_2D,
+      webGLContext.TEXTURE_MIN_FILTER,
+      webGLContext.LINEAR
+    );
 
-    // Allocate empty texture now; real video frames go in render()
-    gl.texImage2D(
-      gl.TEXTURE_2D,
+    webGLContext.texImage2D(
+      webGLContext.TEXTURE_2D,
       0,
-      gl.RGB,
-      canvas.width,
-      canvas.height,
+      webGLContext.RGB,
+      canvasElement.width,
+      canvasElement.height,
       0,
-      gl.RGB,
-      gl.UNSIGNED_BYTE,
+      webGLContext.RGB,
+      webGLContext.UNSIGNED_BYTE,
       null
     );
 
-    // 7) Single RAF loop with cancellation
-    let rafId: number;
-    function render() {
-      gl?.useProgram(program);
+    // 7) requestVideoFrameCallback loop
+    let videoFrameCallbackId: number;
+    function renderFrame(now: DOMHighResTimeStamp) {
+      webGLContext?.useProgram(shaderProgram);
 
-      // Only update + draw when we have a frame
       if (
-        video &&
-        gl &&
-        video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+        webGLContext &&
+        typeof videoElement?.readyState === "number" &&
+        videoElement?.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
       ) {
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texImage2D(
-          gl.TEXTURE_2D,
+        webGLContext.bindTexture(webGLContext.TEXTURE_2D, videoTexture);
+        webGLContext.texImage2D(
+          webGLContext.TEXTURE_2D,
           0,
-          gl.RGB,
-          gl.RGB,
-          gl.UNSIGNED_BYTE,
-          video
+          webGLContext.RGB,
+          webGLContext.RGB,
+          webGLContext.UNSIGNED_BYTE,
+          videoElement
         );
+
         if (timeUniformLocation) {
-          gl.uniform1f(timeUniformLocation, performance.now() / 1000);
+          webGLContext.uniform1f(timeUniformLocation, now / 1000);
         }
-        if (clipLocation && selectedClipId !== null && clipStartTime !== null) {
-          const selectedClip = clips.find((clip) => clip.id === selectedClipId);
-          if (!selectedClip) return;
+        if (
+          clipTimeUniformLocation &&
+          selectedClipId !== null &&
+          clipStartTime !== null
+        ) {
+          const selectedClip = clips.find(
+            (clip) => clip.id === selectedClipId
+          )!;
           const clipDuration = Math.max(
             ...selectedClip.instructions.map((inst) => inst.end)
           );
-          const elapsed = performance.now() / 1000 - clipStartTime;
-          const currentClipTime = elapsed % clipDuration;
-          gl.uniform1f(clipLocation, currentClipTime);
+          const elapsedTime = now / 1000 - clipStartTime;
+          const clipTime = elapsedTime % clipDuration;
+          webGLContext.uniform1f(clipTimeUniformLocation, clipTime);
         }
 
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        webGLContext.drawArrays(webGLContext.TRIANGLES, 0, 6);
       }
 
-      rafId = requestAnimationFrame(render);
+      videoFrameCallbackId =
+        videoElement?.requestVideoFrameCallback(renderFrame) || 0;
     }
-    render();
+    videoFrameCallbackId = videoElement.requestVideoFrameCallback(renderFrame);
 
     return () => {
-      cancelAnimationFrame(rafId);
+      videoElement.cancelVideoFrameCallback(videoFrameCallbackId);
       window.removeEventListener("resize", updateBuffers);
-      video.removeEventListener("loadedmetadata", updateBuffers);
+      videoElement.removeEventListener("loadedmetadata", updateBuffers);
     };
   }, [activeEffects, inputSource, selectedClipId, clipStartTime]);
 
