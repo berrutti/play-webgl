@@ -219,10 +219,10 @@ const App = () => {
               return clip.instructions
                 .map(
                   (inst) => `
-        if (u_clipTime_${clipId} >= ${inst.start.toFixed(1)} && 
-            u_clipTime_${clipId} <= ${inst.end.toFixed(1)}) {
-          ${shaderEffects[inst.effect].glsl}
-        }
+      if (u_clipTime_${clipId} >= ${inst.start} && 
+          u_clipTime_${clipId} <= ${inst.end}) {
+        ${shaderEffects[inst.effect].glsl}
+      }
       `
                 )
                 .join("\n");

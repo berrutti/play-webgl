@@ -4,7 +4,7 @@ export enum ShaderEffect {
   SINE_WAVE = "SINE_WAVE",
 }
 
-export interface ShaderInstruction {
+export interface ClipInstruction {
   effect: ShaderEffect;
   start: number;
   end: number;
@@ -13,7 +13,7 @@ export interface ShaderInstruction {
 export interface Clip {
   id: string;
   name: string;
-  instructions: ShaderInstruction[];
+  instructions: ClipInstruction[];
 }
 
 export type ShaderEffectDefinition = {
@@ -110,4 +110,13 @@ export const clips: Clip[] = [
       { effect: ShaderEffect.INVERT, start: 3, end: 4 },
     ],
   },
-];
+].map((clip) => ({
+  ...clip,
+  instructions: clip.instructions.map(({ effect, start, end }) => {
+    if (end < start) {
+      // swap them if out of order
+      return { effect, start: end, end: start };
+    }
+    return { effect, start, end };
+  }),
+}));
