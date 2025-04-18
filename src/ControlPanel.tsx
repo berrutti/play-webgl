@@ -3,31 +3,35 @@ import { clips, ShaderEffect } from "./utils";
 import "./ControlPanel.css";
 
 interface ControlPanelProps {
+  activeEffects: Record<ShaderEffect, boolean>;
   inputSource: string;
-  onInputSourceChange: (newSource: string) => void;
-  playingClips: Record<string, boolean>;
-  loopClips: Record<string, boolean>;
-  onPlayToggle: (clipId: string) => void;
-  onLoopToggle: (clipId: string) => void;
   isRecording: boolean;
+  loopClips: Record<string, boolean>;
+  onInputSourceChange: (newSource: string) => void;
+  onLoopToggle: (clipId: string) => void;
+  onPlayToggle: (clipId: string) => void;
   onStartRecording: () => void;
   onStopRecording: () => void;
-  activeEffects: Record<ShaderEffect, boolean>;
   onToggleEffect: (effect: ShaderEffect) => void;
+  onToggleHelp: () => void;
+  playingClips: Record<string, boolean>;
+  showHelp: boolean;
 }
 
 const ControlPanel: React.FC<ControlPanelProps> = ({
+  activeEffects,
   inputSource,
-  onInputSourceChange,
-  playingClips,
-  loopClips,
-  onPlayToggle,
-  onLoopToggle,
   isRecording,
+  loopClips,
+  onInputSourceChange,
+  onLoopToggle,
+  onPlayToggle,
   onStartRecording,
   onStopRecording,
-  activeEffects,
   onToggleEffect,
+  onToggleHelp,
+  playingClips,
+  showHelp,
 }) => {
   return (
     <div className="control-panel">
@@ -107,6 +111,21 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
               </label>
             </div>
           ))}
+        </div>
+      </div>
+
+      <div className="control-group">
+        <div className="checkbox-group">
+          <input
+            type="checkbox"
+            id="showHelp"
+            className="control-checkbox"
+            checked={showHelp}
+            onChange={onToggleHelp}
+          />
+          <label htmlFor="showHelp" className="checkbox-label">
+            Show help
+          </label>
         </div>
       </div>
     </div>

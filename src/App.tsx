@@ -120,6 +120,8 @@ const App = () => {
     { effect: ShaderEffect; on: boolean; time: number }[]
   >([]);
 
+  const [showHelp, setShowHelp] = useState(true);
+
   // Input Source Setup
   useEffect(() => {
     const videoElement = videoRef.current;
@@ -545,18 +547,35 @@ void main() {
           }}
         >
           <ControlPanel
+            activeEffects={activeEffects}
             inputSource={inputSource}
-            onInputSourceChange={handleInputSourceChange}
-            playingClips={playingClips}
-            loopClips={loopClips}
-            onPlayToggle={handlePlayToggle}
-            onLoopToggle={handleLoopToggle}
             isRecording={isRecording}
+            loopClips={loopClips}
+            onInputSourceChange={handleInputSourceChange}
+            onLoopToggle={handleLoopToggle}
+            onPlayToggle={handlePlayToggle}
             onStartRecording={startRecording}
             onStopRecording={stopRecording}
-            activeEffects={activeEffects}
             onToggleEffect={handleCheckboxChange}
+            onToggleHelp={() => setShowHelp((prev) => !prev)}
+            playingClips={playingClips}
+            showHelp={showHelp}
           />
+        </div>
+      )}
+
+      {showHelp && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "20px",
+            width: "100%",
+            textAlign: "center",
+            color: "white",
+            pointerEvents: "none",
+          }}
+        >
+          Hint: Right click to show the effects.
         </div>
       )}
     </div>
