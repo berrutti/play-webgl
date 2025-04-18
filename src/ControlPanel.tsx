@@ -1,5 +1,5 @@
 import React from "react";
-import { ShaderEffect, clips } from "./utils";
+import { clips, ShaderEffect } from "./utils";
 import "./ControlPanel.css";
 
 interface ControlPanelProps {
@@ -9,6 +9,9 @@ interface ControlPanelProps {
   loopClips: Record<string, boolean>;
   onPlayToggle: (clipId: string) => void;
   onLoopToggle: (clipId: string) => void;
+  isRecording: boolean;
+  onStartRecording: () => void;
+  onStopRecording: () => void;
   activeEffects: Record<ShaderEffect, boolean>;
   onToggleEffect: (effect: ShaderEffect) => void;
 }
@@ -20,12 +23,15 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   loopClips,
   onPlayToggle,
   onLoopToggle,
+  isRecording,
+  onStartRecording,
+  onStopRecording,
   activeEffects,
   onToggleEffect,
 }) => {
   return (
     <div className="control-panel">
-      {/* ——— Input Source ——— */}
+      {/* Input Source */}
       <div className="control-group">
         <label htmlFor="inputSource" className="control-label">
           Input Source:
@@ -41,7 +47,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         </select>
       </div>
 
-      {/* ——— Clips ——— */}
+      {/* Clips */}
       <div className="control-group">
         <label className="control-label">Clips:</label>
         <div className="clips-container">
@@ -70,7 +76,20 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         </div>
       </div>
 
-      {/* ——— Effects ——— */}
+      {/* Recording Mode */}
+      <div className="control-group">
+        {!isRecording ? (
+          <button className="record-button" onClick={onStartRecording}>
+            ▶ Record
+          </button>
+        ) : (
+          <button className="record-button recording" onClick={onStopRecording}>
+            ⏹ Stop
+          </button>
+        )}
+      </div>
+
+      {/* Effects */}
       <div className="control-group">
         <label className="control-label">Effects:</label>
         <div className="checkbox-container">

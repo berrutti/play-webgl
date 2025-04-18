@@ -114,6 +114,12 @@ const App = () => {
     {}
   );
 
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingStart, setRecordingStart] = useState<number>(0);
+  const [recordedEvents, setRecordedEvents] = useState<
+    { effect: ShaderEffect; on: boolean; time: number }[]
+  >([]);
+
   // Input Source Setup
   useEffect(() => {
     const videoElement = videoRef.current;
@@ -408,10 +414,73 @@ const App = () => {
   };
 
   const handleCheckboxChange = (effect: ShaderEffect) => {
+    const nextEffect = !activeEffects[effect];
     setActiveEffects((prev) => ({
       ...prev,
-      [effect]: !prev[effect],
+      [effect]: nextEffect,
     }));
+
+    if (isRecording) {
+      const now = performance.now() / 1000;
+      setRecordedEvents((evs) => [
+        ...evs,
+        { effect, on: nextEffect, time: now - recordingStart },
+      ]);
+    }
+  };
+
+  const startRecording = () => {
+    setPlayingClips(
+      (prev) =>
+        Object.fromEntries(
+          Object.keys(prev).map((clipId) => [clipId, false])
+        ) as Record<string, boolean>
+    );
+    // 2) Reset all start times too
+    setClipStartTimes({});
+
+    // 3) Now clear the old recording and start fresh
+    setRecordedEvents([]);
+    setRecordingStart(performance.now() / 1000);
+    setIsRecording(true);
+  };
+
+  // Stop recording – turn off recording mode and build a Clip
+  const stopRecording = () => {
+    setIsRecording(false);
+    // build a new Clip from recordedEvents:
+    const instructions: { effect: ShaderEffect; start: number; end: number }[] =
+      [];
+    // for each effect, pair on/off events in chronological order
+    Object.values(ShaderEffect).forEach((eff) => {
+      const events = recordedEvents.filter((e) => e.effect === eff);
+      let pendingOn: number | null = null;
+      events.forEach((e) => {
+        if (e.on) {
+          pendingOn = e.time;
+        } else if (pendingOn !== null) {
+          instructions.push({ effect: eff, start: pendingOn, end: e.time });
+          pendingOn = null;
+        }
+      });
+      // if still “on” at the end, close it
+      if (pendingOn !== null) {
+        instructions.push({
+          effect: eff,
+          start: pendingOn,
+          end: recordedEvents[recordedEvents.length - 1]?.time ?? 0,
+        });
+      }
+    });
+
+    const newClip = {
+      id: `${Date.now()}`, // or prompt for a name
+      name: `Recorded ${new Date().toLocaleTimeString()}`,
+      instructions,
+    };
+
+    console.log("🆕 New clip:", newClip);
+    // TODO: push newClip into your clips array / UI so you can play it
   };
 
   const handlePlayToggle = (clipId: string) => {
@@ -469,6 +538,9 @@ const App = () => {
             loopClips={loopClips}
             onPlayToggle={handlePlayToggle}
             onLoopToggle={handleLoopToggle}
+            isRecording={isRecording}
+            onStartRecording={startRecording}
+            onStopRecording={stopRecording}
             activeEffects={activeEffects}
             onToggleEffect={handleCheckboxChange}
           />
