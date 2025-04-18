@@ -153,7 +153,7 @@ const App = () => {
       uniform sampler2D u_image;
       uniform float u_time;
       ${
-        selectedClipId && clipStartTime !== null
+        selectedClipId !== null && clipStartTime !== null
           ? "uniform float u_clipTime;"
           : ""
       }
@@ -323,7 +323,7 @@ const App = () => {
             selectedClipId={selectedClipId}
             onClipChange={(newClipId) => {
               setSelectedClipId(newClipId);
-              if (newClipId) {
+              if (newClipId !== null) {
                 setClipStartTime(performance.now() / 1000);
               } else {
                 setClipStartTime(null);

@@ -42,8 +42,10 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         <select
           id="clipSelect"
           className="control-select"
-          value={selectedClipId || ""}
-          onChange={(e) => onClipChange(e.target.value || null)}
+          value={selectedClipId ?? ""}
+          onChange={(e) =>
+            onClipChange(e.target.value === "" ? null : e.target.value)
+          }
         >
           <option value="">None</option>
           {clips.map((clip) => (
