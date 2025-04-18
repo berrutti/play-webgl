@@ -52,9 +52,35 @@ function createProgram(
   return program;
 }
 
+const clipKeyBindings: Record<string, string> = {
+  q: clips[0].id,
+  w: clips[1].id,
+  e: clips[2].id,
+};
+
 const App = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+      const clipId = clipKeyBindings[event.key];
+      if (!clipId) return;
+
+      setPlayingClips((prev) => {
+        const now = performance.now() / 1000;
+        const isNowPlaying = !prev[clipId];
+        if (isNowPlaying) {
+          setClipStartTimes((times) => ({ ...times, [clipId]: now }));
+        }
+        return { ...prev, [clipId]: isNowPlaying };
+      });
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const initialActiveEffects = Object.values(ShaderEffect).reduce(
     (effects, effect) => {
