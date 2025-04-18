@@ -205,45 +205,58 @@ const App = () => {
     window.addEventListener("resize", updateBuffers);
     videoElement.addEventListener("loadedmetadata", updateBuffers);
 
-    // 2) Build fragment shader source (same as before)
-    let fragmentShaderSource = `
-    precision mediump float;
-    uniform sampler2D u_image;
-    uniform float u_time;
-    ${Object.entries(playingClips)
-      .map(([clipId, isPlaying]) =>
-        isPlaying ? `uniform float u_clipTime_${clipId};` : ``
-      )
-      .join("\n")}
-    varying vec2 v_texCoord;
-    void main() {
-      vec4 color = texture2D(u_image, v_texCoord);
-          ${Object.entries(playingClips)
-            .filter(([, play]) => play)
-            .map(([clipId]) => {
-              const clip = clips.find((c) => c.id === clipId)!;
-              return clip.instructions
-                .map(
-                  (inst) => `
-      if (u_clipTime_${clipId} >= ${inst.start} && 
-          u_clipTime_${clipId} <= ${inst.end}) {
-        ${shaderEffects[inst.effect].glsl}
-      }
-      `
-                )
-                .join("\n");
-            })
-            .join("\n")}
-  `;
-    Object.entries(activeEffects).forEach(([effect, isActive]) => {
-      if (isActive) {
-        fragmentShaderSource += shaderEffects[effect as ShaderEffect].glsl;
-      }
-    });
-    fragmentShaderSource += `
-      gl_FragColor = color;
-    }
-  `;
+    // 2) Build fragment shader source
+    const fragmentShaderSource = `
+precision mediump float;
+uniform sampler2D u_image;
+uniform float u_time;
+${Object.entries(playingClips)
+  .map(([id, on]) => (on ? `uniform float u_clipTime_${id};` : ``))
+  .join("\n")}
+varying vec2 v_texCoord;
+
+void main() {
+  // 1) start with raw UV
+  vec2 uv = v_texCoord;
+
+  // 2) generic mapping pipeline
+  ${(Object.entries(activeEffects) as [ShaderEffect, boolean][])
+    .filter(([eff, on]) => on && shaderEffects[eff].stage === "mapping")
+    .map(([eff]) => shaderEffects[eff].glsl)
+    .join("\n")}
+
+  // 3) sample once
+  vec4 color = texture2D(u_image, uv);
+
+  // 4) any clip‐based effects (just inject their glsl, replacing v_texCoord→uv)
+  ${Object.entries(playingClips)
+    .filter(([, on]) => on)
+    .flatMap(([id]) => {
+      const clip = clips.find((c) => c.id === id)!;
+      return clip.instructions.map(
+        (inst) => `
+     if (u_clipTime_${id} >= ${inst.start.toFixed(
+          3
+        )} && u_clipTime_${id} <= ${inst.end.toFixed(3)}) {
+      ${shaderEffects[inst.effect].glsl.replace(
+        /texture2D\\(u_image,\\s*v_texCoord\\)/g,
+        "texture2D(u_image, uv)"
+      )}
+    }`
+      );
+    })
+    .join("\n")}
+
+  // 5) generic color pipeline
+  ${(Object.entries(activeEffects) as [ShaderEffect, boolean][])
+    .filter(([eff, on]) => on && shaderEffects[eff].stage === "color")
+    .map(([eff]) => shaderEffects[eff].glsl)
+    .join("\n")}
+
+  // 6) output
+  gl_FragColor = color;
+}
+`;
 
     // 3) Compile & link
     const vertexShader = compileShader(
