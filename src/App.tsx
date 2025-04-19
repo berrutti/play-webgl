@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { clips, getTextureCoordinates, ShaderEffect } from "./utils";
-import { buildFragmentShaderSource } from "./shaderBuilder";
+import { buildStaticFragmentShaderSource } from "./shaderBuilder";
 import ControlPanel from "./ControlPanel";
 
 const vertexShaderSource = `
@@ -57,6 +57,28 @@ const clipKeyBindings: Record<string, string> = {
 const App = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const programRef = useRef<WebGLProgram | null>(null);
+
+  // Compile our static shader only once at startup
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const gl = canvas.getContext("webgl");
+    if (!gl) {
+      console.error("WebGL not supported.");
+      return;
+    }
+
+    // Vertex
+    const vsh = compileShader(gl, vertexShaderSource, gl.VERTEX_SHADER);
+    // Fragment (all effects & clips baked in behind uniform flags)
+    const fsh = compileShader(
+      gl,
+      buildStaticFragmentShaderSource(),
+      gl.FRAGMENT_SHADER
+    );
+    programRef.current = createProgram(gl, vsh, fsh);
+  }, []); // run once
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -205,28 +227,8 @@ const App = () => {
     window.addEventListener("resize", updateBuffers);
     videoElement.addEventListener("loadedmetadata", updateBuffers);
 
-    const fragmentShaderSource = buildFragmentShaderSource(
-      activeEffects,
-      effectOrder,
-      playingClips
-    );
-
-    // 3) Compile & link
-    const vertexShader = compileShader(
-      webGLContext,
-      vertexShaderSource,
-      webGLContext.VERTEX_SHADER
-    );
-    const fragmentShader = compileShader(
-      webGLContext,
-      fragmentShaderSource,
-      webGLContext.FRAGMENT_SHADER
-    );
-    const shaderProgram = createProgram(
-      webGLContext,
-      vertexShader,
-      fragmentShader
-    );
+    const shaderProgram = programRef.current;
+    if (!shaderProgram) return;
     webGLContext.useProgram(shaderProgram);
 
     // 4) Attributes
@@ -258,12 +260,6 @@ const App = () => {
       false,
       0,
       0
-    );
-
-    // 5) Uniform locations
-    const timeUniformLocation = webGLContext.getUniformLocation(
-      shaderProgram,
-      "u_time"
     );
 
     // one u_clipTime_<id> uniform per clip
@@ -311,7 +307,10 @@ const App = () => {
     // 7) requestVideoFrameCallback loop
     let videoFrameCallbackId: number;
     function renderFrame(now: DOMHighResTimeStamp) {
-      webGLContext?.useProgram(shaderProgram);
+      const gl = webGLContext;
+      const program = shaderProgram;
+      if (!gl || !program) return;
+      gl.useProgram(program);
 
       if (
         webGLContext &&
@@ -328,34 +327,37 @@ const App = () => {
           videoElement
         );
 
-        if (timeUniformLocation) {
-          webGLContext.uniform1f(timeUniformLocation, now / 1000);
-        }
-        // update every playing clip's u_clipTime_<id>
-        Object.entries(playingClips).forEach(([clipId, isPlaying]) => {
-          if (!isPlaying) return;
-          const start = clipStartTimes[clipId];
-          if (start == null) return;
+        const uTimeLoc = gl.getUniformLocation(program, "u_time");
+        if (uTimeLoc) gl.uniform1f(uTimeLoc, now / 1000);
 
-          // find clip duration
-          const insts = clips.find((c) => c.id === clipId)!.instructions;
-          const duration = Math.max(...insts.map((i) => i.end));
-          const elapsed = now / 1000 - start;
+        // Effect toggles
+        Object.values(ShaderEffect).forEach((eff) => {
+          const loc = gl.getUniformLocation(program, `u_enable_${eff}`);
+          gl.uniform1i(loc, activeEffects[eff] ? 1 : 0);
+        });
 
-          // if not looping & we've passed the end, stop playing
-          if (!loopClips[clipId] && elapsed >= duration) {
-            setPlayingClips((prev) => ({ ...prev, [clipId]: false }));
-            return;
+        // Clip toggles & times
+        Object.entries(playingClips).forEach(([clipId, isOn]) => {
+          const playLoc = gl.getUniformLocation(program, `u_play_${clipId}`);
+          gl.uniform1i(playLoc, isOn ? 1 : 0);
+          if (isOn) {
+            const timeLoc = gl.getUniformLocation(
+              program,
+              `u_clipTime_${clipId}`
+            );
+            const start = clipStartTimes[clipId] || 0;
+            const elapsed = now / 1000 - start;
+
+            const clip = clips.find((c) => c.id === clipId)!;
+            const duration = Math.max(...clip.instructions.map((i) => i.end));
+
+            // if not looping and we've passed the end, stop it
+            if (!loopClips[clipId] && elapsed >= duration) {
+              setPlayingClips((prev) => ({ ...prev, [clipId]: false }));
+              return; // skip uploading u_clipTime
+            }
+            gl.uniform1f(timeLoc, elapsed);
           }
-
-          // otherwise compute the time uniform
-          const t = loopClips[clipId]
-            ? elapsed % duration
-            : Math.min(elapsed, duration);
-          const loc = clipUniformLocations[clipId];
-          if (!loc) return;
-
-          webGLContext.uniform1f(loc, t);
         });
 
         webGLContext.drawArrays(webGLContext.TRIANGLES, 0, 6);
@@ -371,7 +373,14 @@ const App = () => {
       window.removeEventListener("resize", updateBuffers);
       videoElement.removeEventListener("loadedmetadata", updateBuffers);
     };
-  }, [activeEffects, inputSource, playingClips, loopClips, clipStartTimes, effectOrder]);
+  }, [
+    activeEffects,
+    inputSource,
+    playingClips,
+    loopClips,
+    clipStartTimes,
+    effectOrder,
+  ]);
 
   // UI Handlers.
   const handleContextMenu = (event: React.MouseEvent) => {
