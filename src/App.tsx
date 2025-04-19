@@ -371,7 +371,7 @@ const App = () => {
       window.removeEventListener("resize", updateBuffers);
       videoElement.removeEventListener("loadedmetadata", updateBuffers);
     };
-  }, [activeEffects, inputSource, playingClips, loopClips, clipStartTimes]);
+  }, [activeEffects, inputSource, playingClips, loopClips, clipStartTimes, effectOrder]);
 
   // UI Handlers.
   const handleContextMenu = (event: React.MouseEvent) => {
