@@ -1,6 +1,14 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { clips, ShaderEffect, shaderEffects } from "./utils";
 import { useWebGLRenderer } from "./hooks/useWebGLRenderer";
+import { 
+  createInitialTransitions, 
+  startTransition, 
+  updateTransitions, 
+  hasActiveTransitions,
+  getRenderIntensity,
+  type EffectTransitions 
+} from "./transitions";
 import ControlPanel from "./ControlPanel";
 
 const vertexShaderSource = `
@@ -102,6 +110,32 @@ const App = () => {
     return intensities;
   });
 
+  // Transition state for smooth effect animations
+  const [effectTransitions, setEffectTransitions] = useState<EffectTransitions>(createInitialTransitions);
+
+  // Computed rendering state based on transitions
+  const renderingEffects = Object.fromEntries(
+    Object.values(ShaderEffect).map(effect => [
+      effect, 
+      effectTransitions[effect].isActive
+    ])
+  ) as Record<ShaderEffect, boolean>;
+
+  const renderingIntensities = Object.fromEntries(
+    Object.values(ShaderEffect).map(effect => {
+      const transition = effectTransitions[effect];
+      const effectDef = shaderEffects[effect];
+      
+      // For effects with intensity controls, use the actual value (including 0)
+      // For effects without intensity controls, default to 1
+      const userIntensity = effectDef.intensity !== undefined 
+        ? effectIntensities[effect] 
+        : 1;
+        
+      return [effect, getRenderIntensity(transition, userIntensity)];
+    })
+  ) as Record<ShaderEffect, number>;
+
   const [effectOrder, setEffectOrder] = useState<ShaderEffect[]>([]);
 
   const [showPanel, setShowPanel] = useState(false);
@@ -132,6 +166,37 @@ const App = () => {
   >([]);
 
   const [showHelp, setShowHelp] = useState(true);
+
+  // Animation loop for smooth transitions
+  useEffect(() => {
+    let animationFrameId: number;
+    
+    function animate() {
+      const now = performance.now();
+      
+      setEffectTransitions(currentTransitions => {
+        const newTransitions = updateTransitions(currentTransitions, now);
+        
+        // Continue animation if there are active transitions
+        if (hasActiveTransitions(newTransitions)) {
+          animationFrameId = requestAnimationFrame(animate);
+        }
+        
+        return newTransitions;
+      });
+    }
+    
+    // Start animation loop if there are active transitions
+    if (hasActiveTransitions(effectTransitions)) {
+      animationFrameId = requestAnimationFrame(animate);
+    }
+    
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [effectTransitions]); // Re-run when transitions change
 
   // Input Source Setup
   useEffect(() => {
@@ -164,12 +229,12 @@ const App = () => {
     }
   }, [inputSource]);
 
-  // Multi-pass WebGL renderer
+  // Multi-pass WebGL renderer (using computed rendering state for smooth transitions)
   useWebGLRenderer({
     canvasRef,
     videoRef,
-    activeEffects,
-    effectIntensities,
+    activeEffects: renderingEffects,
+    effectIntensities: renderingIntensities,
     playingClips,
     loopClips,
     clipStartTimes,
@@ -182,8 +247,11 @@ const App = () => {
     setShowPanel((prev) => !prev);
   };
 
-  const handleCheckboxChange = (effect: ShaderEffect) => {
+  const handleCheckboxChange = useCallback((effect: ShaderEffect) => {
     const nextEffect = !activeEffects[effect];
+    const now = performance.now();
+    
+    // Update UI state immediately for responsive feel
     setActiveEffects((prev) => ({
       ...prev,
       [effect]: nextEffect,
@@ -194,21 +262,42 @@ const App = () => {
       return nextEffect ? [...filtered, effect] : filtered;
     });
 
+    // Start smooth transition
+    setEffectTransitions(currentTransitions => {
+      const targetIntensity = nextEffect ? 1 : 0;
+      return startTransition(currentTransitions, effect, targetIntensity, now);
+    });
+
     if (isRecording) {
-      const now = performance.now() / 1000;
+      const nowInSeconds = now / 1000;
       setRecordedEvents((evs) => [
         ...evs,
-        { effect, on: nextEffect, time: now - recordingStart },
+        { effect, on: nextEffect, time: nowInSeconds - recordingStart },
       ]);
     }
-  };
+  }, [activeEffects, isRecording, recordingStart]);
 
-  const handleIntensityChange = (effect: ShaderEffect, intensity: number) => {
+  const handleIntensityChange = useCallback((effect: ShaderEffect, intensity: number) => {
     setEffectIntensities((prev) => ({
       ...prev,
       [effect]: intensity,
     }));
-  };
+    
+    // If effect has an active transition, update the target intensity
+    setEffectTransitions(currentTransitions => {
+      const transition = currentTransitions[effect];
+      if (transition.isActive && activeEffects[effect]) {
+        return {
+          ...currentTransitions,
+          [effect]: {
+            ...transition,
+            targetIntensity: 1, // Always target full intensity for active effects
+          }
+        };
+      }
+      return currentTransitions;
+    });
+  }, [activeEffects]);
 
   const startRecording = () => {
     setPlayingClips(

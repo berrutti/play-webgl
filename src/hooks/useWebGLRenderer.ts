@@ -328,8 +328,9 @@ export function useWebGLRenderer({
           gl.uniform1f(effectShader.uniformLocations.time, now / 1000);
           
           // Set intensity if effect supports it
-          if (effectShader.uniformLocations[`intensity_${effect}`]) {
-            gl.uniform1f(effectShader.uniformLocations[`intensity_${effect}`], effectIntensities[effect]);
+          const intensityLocation = effectShader.uniformLocations[`intensity_${effect}`];
+          if (intensityLocation) {
+            gl.uniform1f(intensityLocation, effectIntensities[effect]);
           }
           
           gl.drawArrays(gl.TRIANGLES, 0, 6);
