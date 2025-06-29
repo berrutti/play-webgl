@@ -4,9 +4,11 @@ import "./ControlPanel.css";
 
 interface ControlPanelProps {
   activeEffects: Record<ShaderEffect, boolean>;
+  bpm: number;
   effectIntensities: Record<ShaderEffect, number>;
   inputSource: string;
   isRecording: boolean;
+  isSettingBpm: boolean;
   loopClips: Record<string, boolean>;
   onInputSourceChange: (newSource: string) => void;
   onIntensityChange: (effect: ShaderEffect, intensity: number) => void;
@@ -22,9 +24,11 @@ interface ControlPanelProps {
 
 const ControlPanel: React.FC<ControlPanelProps> = ({
   activeEffects,
+  bpm,
   effectIntensities,
   inputSource,
   isRecording,
+  isSettingBpm,
   loopClips,
   onInputSourceChange,
   onIntensityChange,
@@ -53,6 +57,14 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           <option value="webcam">Webcam</option>
           <option value="video">Video File</option>
         </select>
+      </div>
+
+      {/* BPM */}
+      <div className="control-group">
+        <label className="control-label">
+          BPM: {bpm} {isSettingBpm && "🎵"}
+        </label>
+        <p className="control-description">Press spacebar to tap tempo</p>
       </div>
 
       {/* Clips */}
@@ -119,7 +131,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                     {effect.toUpperCase()}
                   </label>
                 </div>
-                {hasIntensity && activeEffects[effect] && (
+                {hasIntensity && (
                   <div className="intensity-control">
                     <input
                       type="range"
@@ -129,6 +141,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                       value={effectIntensities[effect]}
                       onChange={(e) => onIntensityChange(effect, parseFloat(e.target.value))}
                       className="intensity-slider"
+                      disabled={!activeEffects[effect]}
                     />
                     <span className="intensity-value">
                       {Math.round(effectIntensities[effect] * 100)}%

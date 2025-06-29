@@ -54,9 +54,32 @@
   border: none;
 }
 
+.intensity-slider:disabled {
+  background: #f0f0f0;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.intensity-slider:disabled::-webkit-slider-thumb {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.intensity-slider:disabled::-moz-range-thumb {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
 .intensity-value {
   font-size: 12px;
   color: #666;
   min-width: 30px;
   text-align: right;
+}
+
+.control-description {
+  font-size: 12px;
+  color: #666;
+  margin: 5px 0 0 0;
+  font-style: italic;
 }

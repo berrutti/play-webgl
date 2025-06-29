@@ -161,8 +161,8 @@ export const shaderEffects: Record<ShaderEffect, ShaderEffectDef> = {
 
 export interface ClipInstruction {
   effect: ShaderEffect;
-  start: number;
-  end: number;
+  startBeat: number;      // Which beat to start on (1-based, like music)
+  lengthBeats: number;    // How many beats the effect lasts
 }
 
 export interface Clip {
@@ -225,33 +225,32 @@ export const clips: Clip[] = [
     id: "1",
     name: "Grayscale then Invert",
     instructions: [
-      { effect: ShaderEffect.GRAYSCALE, start: 0, end: 5 },
-      { effect: ShaderEffect.INVERT, start: 3, end: 8 },
+      { effect: ShaderEffect.GRAYSCALE, startBeat: 1, lengthBeats: 4 },     // Beats 1-4
+      { effect: ShaderEffect.INVERT, startBeat: 3, lengthBeats: 4 },        // Beats 3-6 (overlap)
     ],
   },
   {
-    id: "2",
-    name: "Sine wave 10 seconds",
+    id: "2", 
+    name: "Rhythmic Sine Wave",
     instructions: [
-      { effect: ShaderEffect.SINE_WAVE, start: 0, end: 5 },
-      { effect: ShaderEffect.SINE_WAVE, start: 6, end: 6.1 },
+      { effect: ShaderEffect.SINE_WAVE, startBeat: 1, lengthBeats: 4 },     // Beats 1-4
+      { effect: ShaderEffect.SINE_WAVE, startBeat: 7, lengthBeats: 0.5 },   // Beat 7 (short accent)
     ],
   },
   {
     id: "3",
-    name: "Double invert",
+    name: "Double Beat Invert", 
     instructions: [
-      { effect: ShaderEffect.INVERT, start: 1, end: 2 },
-      { effect: ShaderEffect.INVERT, start: 3, end: 4 },
+      { effect: ShaderEffect.INVERT, startBeat: 1, lengthBeats: 1 },        // Beat 1
+      { effect: ShaderEffect.INVERT, startBeat: 3, lengthBeats: 1 },        // Beat 3
     ],
   },
-].map((clip) => ({
-  ...clip,
-  instructions: clip.instructions.map(({ effect, start, end }) => {
-    if (end < start) {
-      // swap them if out of order
-      return { effect, start: end, end: start };
-    }
-    return { effect, start, end };
-  }),
-}));
+  {
+    id: "4",
+    name: "Kaleidoscope Drop",
+    instructions: [
+      { effect: ShaderEffect.KALEIDOSCOPE, startBeat: 1, lengthBeats: 8 },  // Full 2-bar phrase
+      { effect: ShaderEffect.CHROMA, startBeat: 5, lengthBeats: 2 },        // Add chroma in second bar
+    ],
+  },
+];

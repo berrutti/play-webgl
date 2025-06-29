@@ -14,16 +14,78 @@ const clipKeyBindings: Record<string, string> = {
   q: clips[0].id,
   w: clips[1].id,
   e: clips[2].id,
+  r: clips[3].id,
 };
 
 const App = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  // BPM tapping state
+  const [bpm, setBpm] = useState<number>(120); // Default BPM
+  const [isSettingBpm, setIsSettingBpm] = useState<boolean>(false);
+  const tapTimesRef = useRef<number[]>([]);
+
+  // BPM calculation helpers
+  const calculateBpmFromTaps = useCallback((times: number[]): number => {
+    if (times.length < 2) return 120;
+    
+    // Calculate intervals between taps
+    const intervals = [];
+    for (let i = 1; i < times.length; i++) {
+      intervals.push(times[i] - times[i - 1]);
+    }
+    
+    // Average the intervals
+    const avgInterval = intervals.reduce((sum, interval) => sum + interval, 0) / intervals.length;
+    
+    // Convert to BPM (60000ms = 1 minute)
+    const rawBpm = 60000 / avgInterval;
+    
+    // Round to nearest 5 for more musical BPMs
+    return Math.max(60, Math.min(200, Math.round(rawBpm / 5) * 5));
+  }, []);
+
+  const handleBpmTap = useCallback(() => {
+    const now = performance.now();
+    
+    // Add current tap and keep only recent taps
+    const newTimes = [...tapTimesRef.current, now];
+    const cutoffTime = now - 10000;
+    const recentTimes = newTimes.filter(time => time > cutoffTime).slice(-8);
+    
+    tapTimesRef.current = recentTimes;
+    
+    // Calculate BPM if we have at least 2 taps
+    if (recentTimes.length >= 2) {
+      const newBpm = calculateBpmFromTaps(recentTimes);
+      setBpm(newBpm);
+      setIsSettingBpm(true);
+      
+      // Auto-complete BPM setting after 2 beat intervals of inactivity
+      const expectedInterval = 60000 / newBpm;
+      const timeoutDuration = expectedInterval * 2 + 500; // 2 beats + 500ms buffer
+      
+      setTimeout(() => {
+        setIsSettingBpm(false);
+        tapTimesRef.current = [];
+      }, timeoutDuration);
+    }
+  }, [calculateBpmFromTaps]);
+
   // Key binding handler
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.repeat) return;
+      
+      // Handle spacebar for BPM tapping
+      if (event.code === 'Space') {
+        event.preventDefault();
+        handleBpmTap();
+        return;
+      }
+      
+      // Handle clip key bindings
       const clipId = clipKeyBindings[event.key];
       if (!clipId) return;
 
@@ -39,7 +101,7 @@ const App = () => {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [handleBpmTap]);
 
   // State management
   const initialActiveEffects = Object.values(ShaderEffect).reduce(
@@ -181,6 +243,16 @@ const App = () => {
     }
   }, [inputSource]);
 
+  // UI Handlers
+  const handleContextMenu = (event: React.MouseEvent) => {
+    event.preventDefault();
+    setShowPanel((prev) => !prev);
+  };
+
+  const handleClipFinished = useCallback((clipId: string) => {
+    setPlayingClips((prev) => ({ ...prev, [clipId]: false }));
+  }, []);
+
   // Multi-pass WebGL renderer (using computed rendering state for smooth transitions)
   useWebGLRenderer({
     canvasRef,
@@ -191,13 +263,9 @@ const App = () => {
     loopClips,
     clipStartTimes,
     inputSource,
+    bpm,
+    onClipFinished: handleClipFinished,
   });
-
-  // UI Handlers
-  const handleContextMenu = (event: React.MouseEvent) => {
-    event.preventDefault();
-    setShowPanel((prev) => !prev);
-  };
 
   const handleCheckboxChange = useCallback((effect: ShaderEffect) => {
     const nextEffect = !activeEffects[effect];
@@ -340,23 +408,25 @@ const App = () => {
             zIndex: 10,
           }}
         >
-          <ControlPanel
-            activeEffects={activeEffects}
-            effectIntensities={effectIntensities}
-            inputSource={inputSource}
-            isRecording={isRecording}
-            loopClips={loopClips}
-            onInputSourceChange={handleInputSourceChange}
-            onIntensityChange={handleIntensityChange}
-            onLoopToggle={handleLoopToggle}
-            onPlayToggle={handlePlayToggle}
-            onStartRecording={startRecording}
-            onStopRecording={stopRecording}
-            onToggleEffect={handleCheckboxChange}
-            onToggleHelp={() => setShowHelp((prev) => !prev)}
-            playingClips={playingClips}
-            showHelp={showHelp}
-          />
+                  <ControlPanel
+          activeEffects={activeEffects}
+          bpm={bpm}
+          effectIntensities={effectIntensities}
+          inputSource={inputSource}
+          isRecording={isRecording}
+          isSettingBpm={isSettingBpm}
+          loopClips={loopClips}
+          onInputSourceChange={handleInputSourceChange}
+          onIntensityChange={handleIntensityChange}
+          onLoopToggle={handleLoopToggle}
+          onPlayToggle={handlePlayToggle}
+          onStartRecording={startRecording}
+          onStopRecording={stopRecording}
+          onToggleEffect={handleCheckboxChange}
+          onToggleHelp={() => setShowHelp((prev) => !prev)}
+          playingClips={playingClips}
+          showHelp={showHelp}
+        />
         </div>
       )}
 
@@ -371,7 +441,7 @@ const App = () => {
             pointerEvents: "none",
           }}
         >
-          Hint: Right click to show the effects.
+          <div>Right click to show controls | Spacebar to tap BPM | Q/W/E/R for beat-based clips</div>
         </div>
       )}
     </div>
