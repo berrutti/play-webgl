@@ -47,11 +47,39 @@ export const shaderEffects: Record<ShaderEffect, ShaderEffectDef> = {
     stage: "mapping",
     glsl: `
       {
-        vec2 c = uv*2.0-1.0;
-        float slices = 6.0;
+        // Center the coordinates and add time-based rotation
+        vec2 center = vec2(0.5, 0.5);
+        vec2 c = (uv - center) * 1.5; // 1.5x zoom to see more of the image
+        
+        // Add gentle rotation over time
+        float rotation = u_time * 0.1;
+        float cosR = cos(rotation);
+        float sinR = sin(rotation);
+        c = vec2(c.x * cosR - c.y * sinR, c.x * sinR + c.y * cosR);
+        
+        // More slices for complexity and beauty
+        float slices = 10.0;
         float r = length(c);
-        float a = mod(atan(c.y,c.x), 2.0*3.14159265/slices);
-        uv = (vec2(cos(a),sin(a)) * r + 1.0) * 0.5;
+        float a = atan(c.y, c.x);
+        
+        // Create the kaleidoscope mirroring
+        float slice = 2.0 * 3.14159265 / slices;
+        a = mod(a, slice);
+        
+        // Mirror every other slice for more interesting patterns
+        if (mod(floor(atan(c.y, c.x) / slice), 2.0) > 0.5) {
+          a = slice - a;
+        }
+        
+        // Reconstruct coordinates with better scaling
+        vec2 kaleidoCoord = vec2(cos(a), sin(a)) * r * 0.8; // 0.8 scale for better fit
+        
+        // Offset the sampling area to get more interesting parts of the image
+        // Sample from upper area where face usually is, not dead center
+        uv = kaleidoCoord + vec2(0.5, 0.4);
+        
+        // Keep UV in bounds with wrapping for seamless effect
+        uv = fract(uv);
       }
     `,
   },

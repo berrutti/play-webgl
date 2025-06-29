@@ -6,55 +6,9 @@ import {
   startTransition, 
   updateTransitions, 
   hasActiveTransitions,
-  getRenderIntensity,
   type EffectTransitions 
 } from "./transitions";
 import ControlPanel from "./ControlPanel";
-
-const vertexShaderSource = `
-  attribute vec2 a_position;
-  attribute vec2 a_texCoord;
-  varying vec2 v_texCoord;
-  void main() {
-    gl_Position = vec4(a_position, 0.0, 1.0);
-    v_texCoord = a_texCoord;
-  }
-`;
-
-function compileShader(
-  gl: WebGLRenderingContext,
-  source: string,
-  type: number
-): WebGLShader {
-  const shader = gl.createShader(type);
-  if (!shader) throw new Error("Failed to create shader.");
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    const errMsg = gl.getShaderInfoLog(shader);
-    gl.deleteShader(shader);
-    throw new Error("Error compiling shader: " + errMsg);
-  }
-  return shader;
-}
-
-function createProgram(
-  gl: WebGLRenderingContext,
-  vertexShader: WebGLShader,
-  fragmentShader: WebGLShader
-): WebGLProgram {
-  const program = gl.createProgram();
-  if (!program) throw new Error("Failed to create program.");
-  gl.attachShader(program, vertexShader);
-  gl.attachShader(program, fragmentShader);
-  gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    const errMsg = gl.getProgramInfoLog(program);
-    gl.deleteProgram(program);
-    throw new Error("Error linking program: " + errMsg);
-  }
-  return program;
-}
 
 const clipKeyBindings: Record<string, string> = {
   q: clips[0].id,
@@ -132,11 +86,9 @@ const App = () => {
         ? effectIntensities[effect] 
         : 1;
         
-      return [effect, getRenderIntensity(transition, userIntensity)];
+      return [effect, transition.currentIntensity * userIntensity];
     })
-  ) as Record<ShaderEffect, number>;
-
-  const [effectOrder, setEffectOrder] = useState<ShaderEffect[]>([]);
+      ) as Record<ShaderEffect, number>;
 
   const [showPanel, setShowPanel] = useState(false);
   const [inputSource, setInputSource] = useState("webcam");
@@ -256,11 +208,6 @@ const App = () => {
       ...prev,
       [effect]: nextEffect,
     }));
-
-    setEffectOrder((order) => {
-      const filtered = order.filter((e) => e !== effect);
-      return nextEffect ? [...filtered, effect] : filtered;
-    });
 
     // Start smooth transition
     setEffectTransitions(currentTransitions => {

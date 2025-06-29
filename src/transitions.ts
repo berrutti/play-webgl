@@ -1,6 +1,6 @@
 import { ShaderEffect, shaderEffects } from './utils';
 
-export const TRANSITION_DURATION = 300; // milliseconds
+export const TRANSITION_DURATION = 100; // milliseconds
 
 export type TransitionState = 'idle' | 'transitioning-in' | 'transitioning-out';
 
@@ -24,7 +24,7 @@ export function easeInOutCubic(t: number): number {
 // Initialize transition state for all effects
 export function createInitialTransitions(): EffectTransitions {
   const transitions: Partial<EffectTransitions> = {};
-  
+
   Object.values(ShaderEffect).forEach(effect => {
     transitions[effect] = {
       state: 'idle',
@@ -36,7 +36,7 @@ export function createInitialTransitions(): EffectTransitions {
       isActive: false,
     };
   });
-  
+
   return transitions as EffectTransitions;
 }
 
@@ -49,10 +49,10 @@ export function startTransition(
 ): EffectTransitions {
   const current = transitions[effect];
   const newTransitions = { ...transitions };
-  
+
   // Only create smooth transitions for effects that have intensity controls
   const hasIntensityControl = shaderEffects[effect].intensity !== undefined;
-  
+
   if (hasIntensityControl) {
     // Smooth transition for intensity-controlled effects
     newTransitions[effect] = {
@@ -77,7 +77,7 @@ export function startTransition(
       isActive: targetIntensity > 0,
     };
   }
-  
+
   return newTransitions;
 }
 
@@ -88,18 +88,18 @@ export function updateTransitions(
 ): EffectTransitions {
   const newTransitions = { ...transitions };
   let hasChanges = false;
-  
+
   Object.entries(newTransitions).forEach(([effectKey, transition]) => {
     const effect = effectKey as ShaderEffect;
-    
+
     if (transition.state === 'idle') return;
-    
+
     const elapsed = now - transition.startTime;
     const rawProgress = Math.min(elapsed / TRANSITION_DURATION, 1);
     const easedProgress = easeInOutCubic(rawProgress);
-    
+
     let newIntensity: number;
-    
+
     if (transition.state === 'transitioning-in') {
       // Fade in: interpolate from startIntensity to targetIntensity
       newIntensity = transition.startIntensity + (easedProgress * (transition.targetIntensity - transition.startIntensity));
@@ -107,13 +107,13 @@ export function updateTransitions(
       // Fade out: interpolate from startIntensity to targetIntensity (which is 0)
       newIntensity = transition.startIntensity + (easedProgress * (transition.targetIntensity - transition.startIntensity));
     }
-    
+
     newTransitions[effect] = {
       ...transition,
       currentIntensity: newIntensity,
       progress: rawProgress,
     };
-    
+
     // Complete transition
     if (rawProgress >= 1) {
       newTransitions[effect] = {
@@ -123,22 +123,14 @@ export function updateTransitions(
         isActive: transition.targetIntensity > 0,
       };
     }
-    
+
     hasChanges = true;
   });
-  
+
   return hasChanges ? newTransitions : transitions;
 }
 
-// Get the current render intensity for an effect (handles both intensity and non-intensity effects)
-export function getRenderIntensity(
-  transition: EffectTransition,
-  userIntensity: number
-): number {
-  // For effects with intensity controls, multiply by user setting
-  // For effects without intensity controls, use transition intensity as on/off
-  return transition.currentIntensity * userIntensity;
-}
+
 
 // Check if any transitions are active (for animation loop)
 export function hasActiveTransitions(transitions: EffectTransitions): boolean {
