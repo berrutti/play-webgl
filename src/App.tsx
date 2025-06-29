@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { clips, getTextureCoordinates, ShaderEffect, shaderEffects } from "./utils";
-import { buildStaticFragmentShaderSource } from "./shaderBuilder";
+import { clips, ShaderEffect, shaderEffects } from "./utils";
+import { useWebGLRenderer } from "./hooks/useWebGLRenderer";
 import ControlPanel from "./ControlPanel";
 
 const vertexShaderSource = `
@@ -57,29 +57,8 @@ const clipKeyBindings: Record<string, string> = {
 const App = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const programRef = useRef<WebGLProgram | null>(null);
 
-  // Compile our static shader only once at startup
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const gl = canvas.getContext("webgl");
-    if (!gl) {
-      console.error("WebGL not supported.");
-      return;
-    }
-
-    // Vertex
-    const vsh = compileShader(gl, vertexShaderSource, gl.VERTEX_SHADER);
-    // Fragment (all effects & clips baked in behind uniform flags)
-    const fsh = compileShader(
-      gl,
-      buildStaticFragmentShaderSource(),
-      gl.FRAGMENT_SHADER
-    );
-    programRef.current = createProgram(gl, vsh, fsh);
-  }, []); // run once
-
+  // Key binding handler
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.repeat) return;
@@ -100,6 +79,7 @@ const App = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  // State management
   const initialActiveEffects = Object.values(ShaderEffect).reduce(
     (effects, effect) => {
       effects[effect] = false;
@@ -184,226 +164,19 @@ const App = () => {
     }
   }, [inputSource]);
 
-  // WebGL Setup & Rendering
-  useEffect(() => {
-    const videoElement = videoRef.current;
-    const canvasElement = canvasRef.current;
-    if (!videoElement || !canvasElement) return;
-
-    const webGLContext = canvasElement.getContext("webgl");
-    if (!webGLContext) {
-      console.error("WebGL not supported.");
-      return;
-    }
-
-    // 1) Full‑screen quad buffer
-    const quadPositions = new Float32Array([
-      -1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1,
-    ]);
-    const positionBuffer = webGLContext.createBuffer()!;
-    webGLContext.bindBuffer(webGLContext.ARRAY_BUFFER, positionBuffer);
-    webGLContext.bufferData(
-      webGLContext.ARRAY_BUFFER,
-      quadPositions,
-      webGLContext.STATIC_DRAW
-    );
-
-    const textureCoordinateBuffer = webGLContext.createBuffer()!;
-
-    function updateBuffers() {
-      if (!canvasElement || !webGLContext || !videoElement) return;
-      canvasElement.width = window.innerWidth;
-      canvasElement.height = window.innerHeight;
-      webGLContext.viewport(0, 0, canvasElement.width, canvasElement.height);
-
-      const videoWidth = videoElement.videoWidth || 640;
-      const videoHeight = videoElement.videoHeight || 480;
-      const textureCoordinates = getTextureCoordinates(
-        videoWidth,
-        videoHeight,
-        canvasElement.width,
-        canvasElement.height
-      );
-      webGLContext.bindBuffer(
-        webGLContext.ARRAY_BUFFER,
-        textureCoordinateBuffer
-      );
-      webGLContext.bufferData(
-        webGLContext.ARRAY_BUFFER,
-        textureCoordinates,
-        webGLContext.STATIC_DRAW
-      );
-    }
-    updateBuffers();
-    window.addEventListener("resize", updateBuffers);
-    videoElement.addEventListener("loadedmetadata", updateBuffers);
-
-    const shaderProgram = programRef.current;
-    if (!shaderProgram) return;
-    webGLContext.useProgram(shaderProgram);
-
-    // 4) Attributes
-    const positionAttributeLocation = webGLContext.getAttribLocation(
-      shaderProgram,
-      "a_position"
-    );
-    webGLContext.bindBuffer(webGLContext.ARRAY_BUFFER, positionBuffer);
-    webGLContext.enableVertexAttribArray(positionAttributeLocation);
-    webGLContext.vertexAttribPointer(
-      positionAttributeLocation,
-      2,
-      webGLContext.FLOAT,
-      false,
-      0,
-      0
-    );
-
-    const texCoordAttributeLocation = webGLContext.getAttribLocation(
-      shaderProgram,
-      "a_texCoord"
-    );
-    webGLContext.bindBuffer(webGLContext.ARRAY_BUFFER, textureCoordinateBuffer);
-    webGLContext.enableVertexAttribArray(texCoordAttributeLocation);
-    webGLContext.vertexAttribPointer(
-      texCoordAttributeLocation,
-      2,
-      webGLContext.FLOAT,
-      false,
-      0,
-      0
-    );
-
-    // one u_clipTime_<id> uniform per clip
-    const clipUniformLocations: Record<string, WebGLUniformLocation | null> =
-      {};
-    Object.keys(playingClips).forEach((clipId) => {
-      clipUniformLocations[clipId] = webGLContext.getUniformLocation(
-        shaderProgram,
-        `u_clipTime_${clipId}`
-      );
-    });
-
-    // 6) Texture setup + placeholder
-    const videoTexture = webGLContext.createTexture()!;
-    webGLContext.bindTexture(webGLContext.TEXTURE_2D, videoTexture);
-    webGLContext.pixelStorei(webGLContext.UNPACK_FLIP_Y_WEBGL, true);
-    webGLContext.texParameteri(
-      webGLContext.TEXTURE_2D,
-      webGLContext.TEXTURE_WRAP_S,
-      webGLContext.CLAMP_TO_EDGE
-    );
-    webGLContext.texParameteri(
-      webGLContext.TEXTURE_2D,
-      webGLContext.TEXTURE_WRAP_T,
-      webGLContext.CLAMP_TO_EDGE
-    );
-    webGLContext.texParameteri(
-      webGLContext.TEXTURE_2D,
-      webGLContext.TEXTURE_MIN_FILTER,
-      webGLContext.LINEAR
-    );
-
-    webGLContext.texImage2D(
-      webGLContext.TEXTURE_2D,
-      0,
-      webGLContext.RGB,
-      canvasElement.width,
-      canvasElement.height,
-      0,
-      webGLContext.RGB,
-      webGLContext.UNSIGNED_BYTE,
-      null
-    );
-
-    // 7) requestVideoFrameCallback loop
-    let videoFrameCallbackId: number;
-    function renderFrame(now: DOMHighResTimeStamp) {
-      const gl = webGLContext;
-      const program = shaderProgram;
-      if (!gl || !program) return;
-      gl.useProgram(program);
-
-      if (
-        webGLContext &&
-        typeof videoElement?.readyState === "number" &&
-        videoElement?.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
-      ) {
-        webGLContext.bindTexture(webGLContext.TEXTURE_2D, videoTexture);
-        webGLContext.texImage2D(
-          webGLContext.TEXTURE_2D,
-          0,
-          webGLContext.RGB,
-          webGLContext.RGB,
-          webGLContext.UNSIGNED_BYTE,
-          videoElement
-        );
-
-        const uTimeLoc = gl.getUniformLocation(program, "u_time");
-        if (uTimeLoc) gl.uniform1f(uTimeLoc, now / 1000);
-
-        // Effect toggles
-        Object.values(ShaderEffect).forEach((eff) => {
-          const loc = gl.getUniformLocation(program, `u_enable_${eff}`);
-          gl.uniform1i(loc, activeEffects[eff] ? 1 : 0);
-        });
-
-        // Effect intensities
-        Object.values(ShaderEffect).forEach((eff) => {
-          const effectDef = shaderEffects[eff];
-          if (effectDef.intensity !== undefined) {
-            const loc = gl.getUniformLocation(program, `u_intensity_${eff}`);
-            gl.uniform1f(loc, effectIntensities[eff]);
-          }
-        });
-
-        // Clip toggles & times
-        Object.entries(playingClips).forEach(([clipId, isOn]) => {
-          const playLoc = gl.getUniformLocation(program, `u_play_${clipId}`);
-          gl.uniform1i(playLoc, isOn ? 1 : 0);
-          if (isOn) {
-            const timeLoc = gl.getUniformLocation(
-              program,
-              `u_clipTime_${clipId}`
-            );
-            const start = clipStartTimes[clipId] || 0;
-            const elapsed = now / 1000 - start;
-
-            const clip = clips.find((c) => c.id === clipId)!;
-            const duration = Math.max(...clip.instructions.map((i) => i.end));
-
-            // if not looping and we've passed the end, stop it
-            if (!loopClips[clipId] && elapsed >= duration) {
-              setPlayingClips((prev) => ({ ...prev, [clipId]: false }));
-              return; // skip uploading u_clipTime
-            }
-            gl.uniform1f(timeLoc, elapsed);
-          }
-        });
-
-        webGLContext.drawArrays(webGLContext.TRIANGLES, 0, 6);
-      }
-
-      videoFrameCallbackId =
-        videoElement?.requestVideoFrameCallback(renderFrame) || 0;
-    }
-    videoFrameCallbackId = videoElement.requestVideoFrameCallback(renderFrame);
-
-    return () => {
-      videoElement.cancelVideoFrameCallback(videoFrameCallbackId);
-      window.removeEventListener("resize", updateBuffers);
-      videoElement.removeEventListener("loadedmetadata", updateBuffers);
-    };
-  }, [
+  // Multi-pass WebGL renderer
+  useWebGLRenderer({
+    canvasRef,
+    videoRef,
     activeEffects,
     effectIntensities,
-    inputSource,
     playingClips,
     loopClips,
     clipStartTimes,
-    effectOrder,
-  ]);
+    inputSource,
+  });
 
-  // UI Handlers.
+  // UI Handlers
   const handleContextMenu = (event: React.MouseEvent) => {
     event.preventDefault();
     setShowPanel((prev) => !prev);
@@ -444,22 +217,16 @@ const App = () => {
           Object.keys(prev).map((clipId) => [clipId, false])
         ) as Record<string, boolean>
     );
-    // 2) Reset all start times too
     setClipStartTimes({});
-
-    // 3) Now clear the old recording and start fresh
     setRecordedEvents([]);
     setRecordingStart(performance.now() / 1000);
     setIsRecording(true);
   };
 
-  // Stop recording – turn off recording mode and build a Clip
   const stopRecording = () => {
     setIsRecording(false);
-    // build a new Clip from recordedEvents:
     const instructions: { effect: ShaderEffect; start: number; end: number }[] =
       [];
-    // for each effect, pair on/off events in chronological order
     Object.values(ShaderEffect).forEach((eff) => {
       const events = recordedEvents.filter((e) => e.effect === eff);
       let pendingOn: number | null = null;
@@ -471,7 +238,6 @@ const App = () => {
           pendingOn = null;
         }
       });
-      // if still "on" at the end, close it
       if (pendingOn !== null) {
         instructions.push({
           effect: eff,
@@ -482,13 +248,12 @@ const App = () => {
     });
 
     const newClip = {
-      id: `${Date.now()}`, // or prompt for a name
+      id: `${Date.now()}`,
       name: `Recorded ${new Date().toLocaleTimeString()}`,
       instructions,
     };
 
     console.log("🆕 New clip:", newClip);
-    // TODO: push newClip into your clips array / UI so you can play it
   };
 
   const handlePlayToggle = (clipId: string) => {
