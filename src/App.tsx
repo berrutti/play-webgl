@@ -8,6 +8,7 @@ import {
   hasActiveTransitions,
   type EffectTransitions 
 } from "./transitions";
+import { settingsService } from "./services/settingsService";
 import ControlPanel from "./ControlPanel";
 
 const clipKeyBindings: Record<string, string> = {
@@ -103,7 +104,7 @@ const App = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleBpmTap]);
 
-  // State management
+  // State management with default values
   const initialActiveEffects = Object.values(ShaderEffect).reduce(
     (effects, effect) => {
       effects[effect] = false;
@@ -112,8 +113,7 @@ const App = () => {
     {} as Record<ShaderEffect, boolean>
   );
 
-  const [activeEffects, setActiveEffects] =
-    useState<Record<ShaderEffect, boolean>>(initialActiveEffects);
+  const [activeEffects, setActiveEffects] = useState<Record<ShaderEffect, boolean>>(initialActiveEffects);
 
   const [effectIntensities, setEffectIntensities] = useState<Record<ShaderEffect, number>>(() => {
     const intensities: Record<ShaderEffect, number> = {} as Record<ShaderEffect, number>;
@@ -154,6 +154,8 @@ const App = () => {
 
   const [showPanel, setShowPanel] = useState(false);
   const [inputSource, setInputSource] = useState("webcam");
+  const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
+  const [currentBlobUrl, setCurrentBlobUrl] = useState<string | null>(null);
   const [playingClips, setPlayingClips] = useState<Record<string, boolean>>(
     () =>
       clips.reduce((acc, clip) => {
@@ -173,13 +175,71 @@ const App = () => {
     {}
   );
 
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingStart, setRecordingStart] = useState<number>(0);
-  const [recordedEvents, setRecordedEvents] = useState<
-    { effect: ShaderEffect; on: boolean; time: number }[]
-  >([]);
-
   const [showHelp, setShowHelp] = useState(true);
+  const [isMuted, setIsMuted] = useState(false);
+
+  // Load settings from localStorage on mount only
+  useEffect(() => {
+    const savedSettings = settingsService.loadSettings();
+    
+    if (savedSettings.showHelp !== undefined) setShowHelp(savedSettings.showHelp);
+    if (savedSettings.isMuted !== undefined) setIsMuted(savedSettings.isMuted);
+    if (savedSettings.inputSource !== undefined) setInputSource(savedSettings.inputSource);
+    if (savedSettings.activeEffects !== undefined) setActiveEffects(savedSettings.activeEffects);
+    if (savedSettings.effectIntensities !== undefined) setEffectIntensities(savedSettings.effectIntensities);
+    if (savedSettings.loopClips !== undefined) setLoopClips(savedSettings.loopClips);
+    if (savedSettings.bpm !== undefined) setBpm(savedSettings.bpm);
+  }, []); // Empty dependency array - only run on mount
+
+  // Save settings when they change (not on initialization)
+  const [isInitialized, setIsInitialized] = useState(false);
+  
+  useEffect(() => {
+    // Skip saving during initial load
+    if (!isInitialized) {
+      setIsInitialized(true);
+      return;
+    }
+    settingsService.saveShowHelp(showHelp);
+  }, [showHelp, isInitialized]);
+
+  useEffect(() => {
+    if (!isInitialized) return;
+    settingsService.saveMuted(isMuted);
+  }, [isMuted, isInitialized]);
+
+  useEffect(() => {
+    if (!isInitialized) return;
+    settingsService.saveInputSource(inputSource);
+  }, [inputSource, isInitialized]);
+
+  useEffect(() => {
+    if (!isInitialized) return;
+    settingsService.saveActiveEffects(activeEffects);
+  }, [activeEffects, isInitialized]);
+
+  useEffect(() => {
+    if (!isInitialized) return;
+    settingsService.saveEffectIntensities(effectIntensities);
+  }, [effectIntensities, isInitialized]);
+
+  useEffect(() => {
+    if (!isInitialized) return;
+    settingsService.saveLoopClips(loopClips);
+  }, [loopClips, isInitialized]);
+
+  useEffect(() => {
+    if (!isInitialized) return;
+    settingsService.saveBpm(bpm);
+  }, [bpm, isInitialized]);
+
+  // Apply mute state to video element
+  useEffect(() => {
+    const videoElement = videoRef.current;
+    if (videoElement) {
+      videoElement.muted = isMuted;
+    }
+  }, [isMuted]);
 
   // Animation loop for smooth transitions
   useEffect(() => {
@@ -216,11 +276,20 @@ const App = () => {
   useEffect(() => {
     const videoElement = videoRef.current;
     if (!videoElement) return;
+
+    // Clean up previous blob URL if it exists
+    if (currentBlobUrl) {
+      URL.revokeObjectURL(currentBlobUrl);
+      setCurrentBlobUrl(null);
+    }
+
     videoElement.crossOrigin = "anonymous";
     if (videoElement.srcObject) {
       const stream = videoElement.srcObject as MediaStream;
       stream.getTracks().forEach((track) => track.stop());
+      videoElement.srcObject = null;
     }
+
     if (inputSource === "webcam") {
       videoElement.src = "";
       navigator.mediaDevices
@@ -229,19 +298,46 @@ const App = () => {
           videoElement.srcObject = stream;
           return videoElement.play();
         })
-        .catch();
+        .catch(console.error);
     } else if (inputSource === "video") {
       videoElement.pause();
-      videoElement.srcObject = null;
-      videoElement.src =
-        "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+      
+      if (selectedVideoFile) {
+        // Use the user-selected video file
+        const fileUrl = URL.createObjectURL(selectedVideoFile);
+        setCurrentBlobUrl(fileUrl);
+        videoElement.src = fileUrl;
+      } else {
+        // Fallback to Big Buck Bunny if no file is selected
+        videoElement.src =
+          "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+      }
+      
       videoElement.loop = true;
       videoElement.load();
-      videoElement
-        .play()
-        .catch((err) => console.error("Error playing video:", err));
+      
+      // Add a small delay before playing to ensure the video is loaded
+      setTimeout(() => {
+        videoElement
+          .play()
+          .catch((err) => {
+            // Only log error if it's not an abort error (which is normal when switching videos)
+            if (err.name !== 'AbortError') {
+              console.error("Error playing video:", err);
+            }
+          });
+      }, 100);
     }
-  }, [inputSource]);
+  }, [inputSource, selectedVideoFile]);
+
+  // Cleanup blob URL on component unmount
+  useEffect(() => {
+    return () => {
+      if (currentBlobUrl) {
+        URL.revokeObjectURL(currentBlobUrl);
+      }
+    };
+  }, [currentBlobUrl]);
 
   // UI Handlers
   const handleContextMenu = (event: React.MouseEvent) => {
@@ -282,15 +378,7 @@ const App = () => {
       const targetIntensity = nextEffect ? 1 : 0;
       return startTransition(currentTransitions, effect, targetIntensity, now);
     });
-
-    if (isRecording) {
-      const nowInSeconds = now / 1000;
-      setRecordedEvents((evs) => [
-        ...evs,
-        { effect, on: nextEffect, time: nowInSeconds - recordingStart },
-      ]);
-    }
-  }, [activeEffects, isRecording, recordingStart]);
+  }, [activeEffects]);
 
   const handleIntensityChange = useCallback((effect: ShaderEffect, intensity: number) => {
     setEffectIntensities((prev) => ({
@@ -314,52 +402,6 @@ const App = () => {
     });
   }, [activeEffects]);
 
-  const startRecording = () => {
-    setPlayingClips(
-      (prev) =>
-        Object.fromEntries(
-          Object.keys(prev).map((clipId) => [clipId, false])
-        ) as Record<string, boolean>
-    );
-    setClipStartTimes({});
-    setRecordedEvents([]);
-    setRecordingStart(performance.now() / 1000);
-    setIsRecording(true);
-  };
-
-  const stopRecording = () => {
-    setIsRecording(false);
-    const instructions: { effect: ShaderEffect; start: number; end: number }[] =
-      [];
-    Object.values(ShaderEffect).forEach((eff) => {
-      const events = recordedEvents.filter((e) => e.effect === eff);
-      let pendingOn: number | null = null;
-      events.forEach((e) => {
-        if (e.on) {
-          pendingOn = e.time;
-        } else if (pendingOn !== null) {
-          instructions.push({ effect: eff, start: pendingOn, end: e.time });
-          pendingOn = null;
-        }
-      });
-      if (pendingOn !== null) {
-        instructions.push({
-          effect: eff,
-          start: pendingOn,
-          end: recordedEvents[recordedEvents.length - 1]?.time ?? 0,
-        });
-      }
-    });
-
-    const newClip = {
-      id: `${Date.now()}`,
-      name: `Recorded ${new Date().toLocaleTimeString()}`,
-      instructions,
-    };
-
-    console.log("🆕 New clip:", newClip);
-  };
-
   const handlePlayToggle = (clipId: string) => {
     setPlayingClips((prev) => {
       const now = performance.now() / 1000;
@@ -377,6 +419,14 @@ const App = () => {
 
   const handleInputSourceChange = (newSource: string) => {
     setInputSource(newSource);
+  };
+
+  const handleFileSelected = (file: File) => {
+    setSelectedVideoFile(file);
+  };
+
+  const handleMuteToggle = () => {
+    setIsMuted((prev) => !prev);
   };
 
   return (
@@ -413,15 +463,15 @@ const App = () => {
           bpm={bpm}
           effectIntensities={effectIntensities}
           inputSource={inputSource}
-          isRecording={isRecording}
           isSettingBpm={isSettingBpm}
           loopClips={loopClips}
+          isMuted={isMuted}
           onInputSourceChange={handleInputSourceChange}
+          onFileSelected={handleFileSelected}
           onIntensityChange={handleIntensityChange}
           onLoopToggle={handleLoopToggle}
+          onMuteToggle={handleMuteToggle}
           onPlayToggle={handlePlayToggle}
-          onStartRecording={startRecording}
-          onStopRecording={stopRecording}
           onToggleEffect={handleCheckboxChange}
           onToggleHelp={() => setShowHelp((prev) => !prev)}
           playingClips={playingClips}

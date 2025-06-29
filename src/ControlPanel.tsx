@@ -1,5 +1,6 @@
-import React from "react";
-import { clips, ShaderEffect, shaderEffects } from "./utils";
+import React, { useState } from "react";
+import { ShaderEffect } from "./utils";
+import { InputTab, ClipsTab, EffectsTab } from "./components";
 import "./ControlPanel.css";
 
 interface ControlPanelProps {
@@ -7,167 +8,102 @@ interface ControlPanelProps {
   bpm: number;
   effectIntensities: Record<ShaderEffect, number>;
   inputSource: string;
-  isRecording: boolean;
   isSettingBpm: boolean;
   loopClips: Record<string, boolean>;
+  isMuted: boolean;
   onInputSourceChange: (newSource: string) => void;
+  onFileSelected: (file: File) => void;
   onIntensityChange: (effect: ShaderEffect, intensity: number) => void;
   onLoopToggle: (clipId: string) => void;
+  onMuteToggle: () => void;
   onPlayToggle: (clipId: string) => void;
-  onStartRecording: () => void;
-  onStopRecording: () => void;
   onToggleEffect: (effect: ShaderEffect) => void;
   onToggleHelp: () => void;
   playingClips: Record<string, boolean>;
   showHelp: boolean;
 }
 
+type TabType = 'input' | 'clips' | 'effects';
+
 const ControlPanel: React.FC<ControlPanelProps> = ({
   activeEffects,
   bpm,
   effectIntensities,
   inputSource,
-  isRecording,
   isSettingBpm,
   loopClips,
+  isMuted,
   onInputSourceChange,
+  onFileSelected,
   onIntensityChange,
   onLoopToggle,
+  onMuteToggle,
   onPlayToggle,
-  onStartRecording,
-  onStopRecording,
   onToggleEffect,
   onToggleHelp,
   playingClips,
   showHelp,
 }) => {
+  const [activeTab, setActiveTab] = useState<TabType>('input');
+
   return (
     <div className="control-panel">
-      {/* Input Source */}
-      <div className="control-group">
-        <label htmlFor="inputSource" className="control-label">
-          Input Source:
-        </label>
-        <select
-          id="inputSource"
-          className="control-select"
-          value={inputSource}
-          onChange={(e) => onInputSourceChange(e.target.value)}
+      <div className="tab-header">
+        <button 
+          className={`tab-button ${activeTab === 'input' ? 'active' : ''}`}
+          onClick={() => setActiveTab('input')}
         >
-          <option value="webcam">Webcam</option>
-          <option value="video">Video File</option>
-        </select>
+          Input
+        </button>
+        <button 
+          className={`tab-button ${activeTab === 'clips' ? 'active' : ''}`}
+          onClick={() => setActiveTab('clips')}
+        >
+          Clips
+        </button>
+        <button 
+          className={`tab-button ${activeTab === 'effects' ? 'active' : ''}`}
+          onClick={() => setActiveTab('effects')}
+        >
+          Effects
+        </button>
       </div>
 
-      {/* BPM */}
-      <div className="control-group">
-        <label className="control-label">
-          BPM: {bpm} {isSettingBpm && "🎵"}
-        </label>
-        <p className="control-description">Press spacebar to tap tempo</p>
-      </div>
+      {activeTab === 'input' && (
+        <InputTab
+          inputSource={inputSource}
+          onInputSourceChange={onInputSourceChange}
+          onFileSelected={onFileSelected}
+          isMuted={isMuted}
+          onMuteToggle={onMuteToggle}
+          showHelp={showHelp}
+          onToggleHelp={onToggleHelp}
+        />
+      )}
 
-      {/* Clips */}
-      <div className="control-group">
-        <label className="control-label">Clips:</label>
-        <div className="clips-container">
-          {clips.map((clip) => (
-            <div key={clip.id} className="clip-item">
-              <button
-                type="button"
-                className="play-button"
-                onClick={() => onPlayToggle(clip.id)}
-              >
-                {playingClips[clip.id] ? "⏹" : "▶"}
-              </button>
-              <span className="clip-name">{clip.name}</span>
-              <input
-                type="checkbox"
-                id={`loop-${clip.id}`}
-                className="control-checkbox"
-                checked={loopClips[clip.id]}
-                onChange={() => onLoopToggle(clip.id)}
-              />
-              <label htmlFor={`loop-${clip.id}`} className="checkbox-label">
-                Loop
-              </label>
-            </div>
-          ))}
-        </div>
-      </div>
+      {activeTab === 'clips' && (
+        <ClipsTab
+          bpm={bpm}
+          isSettingBpm={isSettingBpm}
+          loopClips={loopClips}
+          onLoopToggle={onLoopToggle}
+          onPlayToggle={onPlayToggle}
+          playingClips={playingClips}
+          showHelp={showHelp}
+          onToggleHelp={onToggleHelp}
+        />
+      )}
 
-      {/* Recording Mode */}
-      <div className="control-group">
-        {!isRecording ? (
-          <button className="record-button" onClick={onStartRecording}>
-            ▶ Record
-          </button>
-        ) : (
-          <button className="record-button recording" onClick={onStopRecording}>
-            ⏹ Stop
-          </button>
-        )}
-      </div>
-
-      {/* Effects */}
-      <div className="control-group">
-        <label className="control-label">Effects:</label>
-        <div className="checkbox-container">
-          {Object.values(ShaderEffect).map((effect) => {
-            const effectDef = shaderEffects[effect];
-            const hasIntensity = effectDef.intensity !== undefined;
-            
-            return (
-              <div key={effect} className="effect-item">
-                <div className="checkbox-group">
-                  <input
-                    type="checkbox"
-                    id={`effect-${effect}`}
-                    className="control-checkbox"
-                    checked={activeEffects[effect]}
-                    onChange={() => onToggleEffect(effect)}
-                  />
-                  <label htmlFor={`effect-${effect}`} className="checkbox-label">
-                    {effect.toUpperCase()}
-                  </label>
-                </div>
-                {hasIntensity && (
-                  <div className="intensity-control">
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.01"
-                      value={effectIntensities[effect]}
-                      onChange={(e) => onIntensityChange(effect, parseFloat(e.target.value))}
-                      className="intensity-slider"
-                      disabled={!activeEffects[effect]}
-                    />
-                    <span className="intensity-value">
-                      {Math.round(effectIntensities[effect] * 100)}%
-                    </span>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="control-group">
-        <div className="checkbox-group">
-          <input
-            type="checkbox"
-            id="showHelp"
-            className="control-checkbox"
-            checked={showHelp}
-            onChange={onToggleHelp}
-          />
-          <label htmlFor="showHelp" className="checkbox-label">
-            Show help
-          </label>
-        </div>
-      </div>
+      {activeTab === 'effects' && (
+        <EffectsTab
+          activeEffects={activeEffects}
+          effectIntensities={effectIntensities}
+          onIntensityChange={onIntensityChange}
+          onToggleEffect={onToggleEffect}
+          showHelp={showHelp}
+          onToggleHelp={onToggleHelp}
+        />
+      )}
     </div>
   );
 };
