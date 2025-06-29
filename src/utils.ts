@@ -16,12 +16,14 @@ export interface ShaderEffectDef {
   /** 'mapping' effects mutate uv, 'color' effects mutate color */
   stage: "mapping" | "color";
   glsl: string;
+  intensity?: number; // Optional - if present, effect has intensity control
 }
 
 export const shaderEffects: Record<ShaderEffect, ShaderEffectDef> = {
   [ShaderEffect.INVERT]: {
     stage: "color",
-    glsl: `color.rgb = 1.0 - color.rgb;`,
+    intensity: 1.0,
+    glsl: `color.rgb = mix(color.rgb, 1.0 - color.rgb, u_intensity_INVERT);`,
   },
 
   [ShaderEffect.GRAYSCALE]: {
@@ -34,9 +36,10 @@ export const shaderEffects: Record<ShaderEffect, ShaderEffectDef> = {
 
   [ShaderEffect.SINE_WAVE]: {
     stage: "color",
+    intensity: 1.0,
     glsl: `
       float w = sin(uv.y*50.0 + u_time*5.0) * 0.1;
-      color.rg += w;
+      color.rg += w * u_intensity_SINE_WAVE;
     `,
   },
 
@@ -78,13 +81,16 @@ export const shaderEffects: Record<ShaderEffect, ShaderEffectDef> = {
 
   [ShaderEffect.CHROMA]: {
     stage: "color",
+    intensity: 1.0,
     glsl: `
       {
         float off = 0.01;
-        float r = texture2D(u_image, uv+vec2(off,0)).r;
-        float g = texture2D(u_image, uv       ).g;
-        float b = texture2D(u_image, uv-vec2(off,0)).b;
-        color = vec4(r,g,b,1.0);
+        vec3 chromaDiff = vec3(
+          texture2D(u_image, uv+vec2(off,0)).r - color.r,
+          0.0,
+          texture2D(u_image, uv-vec2(off,0)).b - color.b
+        );
+        color.rgb += chromaDiff * u_intensity_CHROMA;
       }
     `,
   },
@@ -114,11 +120,12 @@ export const shaderEffects: Record<ShaderEffect, ShaderEffectDef> = {
 
   [ShaderEffect.RIPPLE]: {
     stage: "color",
+    intensity: 1.0,
     glsl: `
       {
         float d = length(uv - 0.5);
         float wave = sin((d - u_time*0.5)*30.0);
-        color.rgb += wave * 0.2;
+        color.rgb += wave * 0.2 * u_intensity_RIPPLE;
       }
     `,
   },

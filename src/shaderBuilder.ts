@@ -5,6 +5,11 @@ export function buildStaticFragmentShaderSource(): string {
     .map((eff) => `uniform bool u_enable_${eff};`)
     .join("\n");
 
+  const intensityUniforms = Object.values(ShaderEffect)
+    .filter((eff) => shaderEffects[eff].intensity !== undefined)
+    .map((eff) => `uniform float u_intensity_${eff};`)
+    .join("\n");
+
   const clipUniforms = clips
     .map(
       (c) => `
@@ -59,6 +64,7 @@ precision mediump float;
 uniform sampler2D u_image;
 uniform float u_time;
 ${effectUniforms}
+${intensityUniforms}
 ${clipUniforms}
 varying vec2 v_texCoord;
 

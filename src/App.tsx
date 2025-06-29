@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { clips, getTextureCoordinates, ShaderEffect } from "./utils";
+import { clips, getTextureCoordinates, ShaderEffect, shaderEffects } from "./utils";
 import { buildStaticFragmentShaderSource } from "./shaderBuilder";
 import ControlPanel from "./ControlPanel";
 
@@ -110,6 +110,17 @@ const App = () => {
 
   const [activeEffects, setActiveEffects] =
     useState<Record<ShaderEffect, boolean>>(initialActiveEffects);
+
+  const [effectIntensities, setEffectIntensities] = useState<Record<ShaderEffect, number>>(() => {
+    const intensities: Record<ShaderEffect, number> = {} as Record<ShaderEffect, number>;
+    Object.values(ShaderEffect).forEach((effect) => {
+      const effectDef = shaderEffects[effect];
+      if (effectDef.intensity !== undefined) {
+        intensities[effect] = effectDef.intensity;
+      }
+    });
+    return intensities;
+  });
 
   const [effectOrder, setEffectOrder] = useState<ShaderEffect[]>([]);
 
@@ -336,6 +347,15 @@ const App = () => {
           gl.uniform1i(loc, activeEffects[eff] ? 1 : 0);
         });
 
+        // Effect intensities
+        Object.values(ShaderEffect).forEach((eff) => {
+          const effectDef = shaderEffects[eff];
+          if (effectDef.intensity !== undefined) {
+            const loc = gl.getUniformLocation(program, `u_intensity_${eff}`);
+            gl.uniform1f(loc, effectIntensities[eff]);
+          }
+        });
+
         // Clip toggles & times
         Object.entries(playingClips).forEach(([clipId, isOn]) => {
           const playLoc = gl.getUniformLocation(program, `u_play_${clipId}`);
@@ -375,6 +395,7 @@ const App = () => {
     };
   }, [
     activeEffects,
+    effectIntensities,
     inputSource,
     playingClips,
     loopClips,
@@ -407,6 +428,13 @@ const App = () => {
         { effect, on: nextEffect, time: now - recordingStart },
       ]);
     }
+  };
+
+  const handleIntensityChange = (effect: ShaderEffect, intensity: number) => {
+    setEffectIntensities((prev) => ({
+      ...prev,
+      [effect]: intensity,
+    }));
   };
 
   const startRecording = () => {
@@ -443,7 +471,7 @@ const App = () => {
           pendingOn = null;
         }
       });
-      // if still “on” at the end, close it
+      // if still "on" at the end, close it
       if (pendingOn !== null) {
         instructions.push({
           effect: eff,
@@ -513,10 +541,12 @@ const App = () => {
         >
           <ControlPanel
             activeEffects={activeEffects}
+            effectIntensities={effectIntensities}
             inputSource={inputSource}
             isRecording={isRecording}
             loopClips={loopClips}
             onInputSourceChange={handleInputSourceChange}
+            onIntensityChange={handleIntensityChange}
             onLoopToggle={handleLoopToggle}
             onPlayToggle={handlePlayToggle}
             onStartRecording={startRecording}

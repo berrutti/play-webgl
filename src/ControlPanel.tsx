@@ -1,13 +1,15 @@
 import React from "react";
-import { clips, ShaderEffect } from "./utils";
+import { clips, ShaderEffect, shaderEffects } from "./utils";
 import "./ControlPanel.css";
 
 interface ControlPanelProps {
   activeEffects: Record<ShaderEffect, boolean>;
+  effectIntensities: Record<ShaderEffect, number>;
   inputSource: string;
   isRecording: boolean;
   loopClips: Record<string, boolean>;
   onInputSourceChange: (newSource: string) => void;
+  onIntensityChange: (effect: ShaderEffect, intensity: number) => void;
   onLoopToggle: (clipId: string) => void;
   onPlayToggle: (clipId: string) => void;
   onStartRecording: () => void;
@@ -20,10 +22,12 @@ interface ControlPanelProps {
 
 const ControlPanel: React.FC<ControlPanelProps> = ({
   activeEffects,
+  effectIntensities,
   inputSource,
   isRecording,
   loopClips,
   onInputSourceChange,
+  onIntensityChange,
   onLoopToggle,
   onPlayToggle,
   onStartRecording,
@@ -97,20 +101,43 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
       <div className="control-group">
         <label className="control-label">Effects:</label>
         <div className="checkbox-container">
-          {Object.values(ShaderEffect).map((effect) => (
-            <div key={effect} className="checkbox-group">
-              <input
-                type="checkbox"
-                id={`effect-${effect}`}
-                className="control-checkbox"
-                checked={activeEffects[effect]}
-                onChange={() => onToggleEffect(effect)}
-              />
-              <label htmlFor={`effect-${effect}`} className="checkbox-label">
-                {effect.toUpperCase()}
-              </label>
-            </div>
-          ))}
+          {Object.values(ShaderEffect).map((effect) => {
+            const effectDef = shaderEffects[effect];
+            const hasIntensity = effectDef.intensity !== undefined;
+            
+            return (
+              <div key={effect} className="effect-item">
+                <div className="checkbox-group">
+                  <input
+                    type="checkbox"
+                    id={`effect-${effect}`}
+                    className="control-checkbox"
+                    checked={activeEffects[effect]}
+                    onChange={() => onToggleEffect(effect)}
+                  />
+                  <label htmlFor={`effect-${effect}`} className="checkbox-label">
+                    {effect.toUpperCase()}
+                  </label>
+                </div>
+                {hasIntensity && activeEffects[effect] && (
+                  <div className="intensity-control">
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={effectIntensities[effect]}
+                      onChange={(e) => onIntensityChange(effect, parseFloat(e.target.value))}
+                      className="intensity-slider"
+                    />
+                    <span className="intensity-value">
+                      {Math.round(effectIntensities[effect] * 100)}%
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 

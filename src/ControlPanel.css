@@ -13,3 +13,50 @@
   color: black;
   cursor: pointer;
 }
+
+.effect-item {
+  margin-bottom: 10px;
+}
+
+.intensity-control {
+  margin-top: 5px;
+  margin-left: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.intensity-slider {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: #ddd;
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.intensity-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #007bff;
+  cursor: pointer;
+}
+
+.intensity-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #007bff;
+  cursor: pointer;
+  border: none;
+}
+
+.intensity-value {
+  font-size: 12px;
+  color: #666;
+  min-width: 30px;
+  text-align: right;
+}
