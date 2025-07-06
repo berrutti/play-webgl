@@ -125,23 +125,32 @@ export const shaderEffects: Record<ShaderEffect, ShaderEffectDef> = {
 
   [ShaderEffect.PIXELATE]: {
     stage: "mapping",
+    intensity: 1.0,
     glsl: `
       {
-        float px = 100.0;
-        uv = floor(uv * px) / px;
+        // Map intensity (0-1) to pixel size: higher intensity = bigger pixels (more pixelation)
+        float px = 200.0 - (u_intensity_PIXELATE * 190.0); // 0->200, 1->10
+        vec2 pixelated_uv = floor(uv * px) / px;
+        uv = mix(uv, pixelated_uv, u_intensity_PIXELATE);
       }
     `,
   },
 
   [ShaderEffect.VORONOI]: {
     stage: "mapping",
+    intensity: 1.0,
     glsl: `
       {
-        vec2 cell = floor(uv * 10.0);
-        vec2 f    = fract(uv * 10.0);
+        // Map intensity (0-1) to cell density: higher intensity = more cells (more distortion)
+        float cellDensity = 5.0 + (u_intensity_VORONOI * 15.0); // 0->5, 1->20
+        
+        vec2 cell = floor(uv * cellDensity);
+        vec2 f    = fract(uv * cellDensity);
         float jx = fract(sin(dot(cell,vec2(12.9898,78.233)))*43758.5453);
         float jy = fract(sin(dot(cell,vec2(93.9898,67.345)))*24634.6345);
-        uv = (cell + vec2(jx,jy) + f) / 10.0;
+        vec2 voronoi_uv = (cell + vec2(jx,jy) + f) / cellDensity;
+        
+        uv = mix(uv, voronoi_uv, u_intensity_VORONOI);
       }
     `,
   },
@@ -230,7 +239,7 @@ export const clips: Clip[] = [
     ],
   },
   {
-    id: "2", 
+    id: "2",
     name: "Rhythmic Sine Wave",
     instructions: [
       { effect: ShaderEffect.SINE_WAVE, startBeat: 1, lengthBeats: 4 },     // Beats 1-4
@@ -239,7 +248,7 @@ export const clips: Clip[] = [
   },
   {
     id: "3",
-    name: "Double Beat Invert", 
+    name: "Double Beat Invert",
     instructions: [
       { effect: ShaderEffect.INVERT, startBeat: 1, lengthBeats: 1 },        // Beat 1
       { effect: ShaderEffect.INVERT, startBeat: 3, lengthBeats: 1 },        // Beat 3
