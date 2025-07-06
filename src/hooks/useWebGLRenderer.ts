@@ -19,6 +19,7 @@ export interface UseWebGLRendererProps {
   inputSource: string;
   bpm: number;
   onClipFinished: (clipId: string) => void;
+  onRenderPerformance?: (fps: number, frameTime: number) => void;
 }
 
 interface RenderTarget {
@@ -110,6 +111,7 @@ export function useWebGLRenderer({
   inputSource,
   bpm,
   onClipFinished,
+  onRenderPerformance,
 }: UseWebGLRendererProps) {
   const glRef = useRef<WebGLRenderingContext | null>(null);
   const videoTextureRef = useRef<WebGLTexture | null>(null);
@@ -123,6 +125,17 @@ export function useWebGLRenderer({
     positionBuffer: null,
     aspectRatioTexCoordBuffer: null,
     standardTexCoordBuffer: null,
+  });
+
+  // Performance tracking for GPU rendering
+  const performanceRef = useRef<{
+    frameStartTimes: number[];
+    lastFrameTime: number;
+    lastPerformanceReport: number;
+  }>({
+    frameStartTimes: [],
+    lastFrameTime: 0,
+    lastPerformanceReport: 0,
   });
 
   // Initialize WebGL context and resources
@@ -337,6 +350,10 @@ export function useWebGLRenderer({
         return;
       }
 
+      // Performance tracking - mark frame start
+      const frameStartTime = performance.now();
+      const perfData = performanceRef.current;
+
       // Update video texture
       gl.bindTexture(gl.TEXTURE_2D, videoTextureRef.current);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, video);
@@ -438,6 +455,28 @@ export function useWebGLRenderer({
         
         gl.drawArrays(gl.TRIANGLES, 0, 6);
       }
+
+      // Performance tracking - measure frame completion and calculate metrics
+      const frameEndTime = performance.now();
+      const frameTime = frameEndTime - frameStartTime;
+      
+      // Track frame times for FPS calculation
+      perfData.frameStartTimes.push(frameStartTime);
+      
+      // Keep only frames from the last second for FPS calculation
+      const oneSecondAgo = frameStartTime - 1000;
+      perfData.frameStartTimes = perfData.frameStartTimes.filter(time => time > oneSecondAgo);
+      
+      // Calculate actual GPU rendering FPS and average frame time
+      const renderFps = perfData.frameStartTimes.length;
+      
+      // Report performance metrics every 200ms to avoid spam
+      if (frameStartTime - perfData.lastPerformanceReport > 200 && onRenderPerformance) {
+        onRenderPerformance(renderFps, frameTime);
+        perfData.lastPerformanceReport = frameStartTime;
+      }
+      
+      perfData.lastFrameTime = frameEndTime;
 
       videoFrameCallbackId = video.requestVideoFrameCallback(renderFrame);
     }
