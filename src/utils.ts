@@ -86,11 +86,18 @@ export const shaderEffects: Record<ShaderEffect, ShaderEffectDef> = {
 
   [ShaderEffect.DISPLACE]: {
     stage: "mapping",
+    intensity: 1.0,
     glsl: `
       {
+        // Map intensity (0-1) to displacement strength: higher intensity = more displacement
         float t = u_time * 0.2;
-        uv.x += (sin((uv.y+t)*10.0)*0.5+0.5)*0.05;
-        uv.y += (sin((uv.x+t)*10.0)*0.5+0.5)*0.05;
+        float displaceAmount = u_intensity_DISPLACE * 0.08; // 0->0, 1->0.08
+        
+        vec2 displaced_uv = uv;
+        displaced_uv.x += (sin((uv.y+t)*10.0)*0.5+0.5)*displaceAmount;
+        displaced_uv.y += (sin((uv.x+t)*10.0)*0.5+0.5)*displaceAmount;
+        
+        uv = mix(uv, displaced_uv, u_intensity_DISPLACE);
       }
     `,
   },

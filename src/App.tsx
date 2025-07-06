@@ -1,12 +1,12 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { clips, ShaderEffect, shaderEffects } from "./utils";
 import { useWebGLRenderer } from "./hooks/useWebGLRenderer";
-import { 
-  createInitialTransitions, 
-  startTransition, 
-  updateTransitions, 
+import {
+  createInitialTransitions,
+  startTransition,
+  updateTransitions,
   hasActiveTransitions,
-  type EffectTransitions 
+  type EffectTransitions
 } from "./transitions";
 import { settingsService } from "./services/settingsService";
 import ControlPanel from "./ControlPanel";
@@ -30,43 +30,43 @@ const App = () => {
   // BPM calculation helpers
   const calculateBpmFromTaps = useCallback((times: number[]): number => {
     if (times.length < 2) return 120;
-    
+
     // Calculate intervals between taps
     const intervals = [];
     for (let i = 1; i < times.length; i++) {
       intervals.push(times[i] - times[i - 1]);
     }
-    
+
     // Average the intervals
     const avgInterval = intervals.reduce((sum, interval) => sum + interval, 0) / intervals.length;
-    
+
     // Convert to BPM (60000ms = 1 minute)
     const rawBpm = 60000 / avgInterval;
-    
+
     // Round to nearest 5 for more musical BPMs
     return Math.max(60, Math.min(200, Math.round(rawBpm / 5) * 5));
   }, []);
 
   const handleBpmTap = useCallback(() => {
     const now = performance.now();
-    
+
     // Add current tap and keep only recent taps
     const newTimes = [...tapTimesRef.current, now];
     const cutoffTime = now - 10000;
     const recentTimes = newTimes.filter(time => time > cutoffTime).slice(-8);
-    
+
     tapTimesRef.current = recentTimes;
-    
+
     // Calculate BPM if we have at least 2 taps
     if (recentTimes.length >= 2) {
       const newBpm = calculateBpmFromTaps(recentTimes);
       setBpm(newBpm);
       setIsSettingBpm(true);
-      
+
       // Auto-complete BPM setting after 2 beat intervals of inactivity
       const expectedInterval = 60000 / newBpm;
       const timeoutDuration = expectedInterval * 2 + 500; // 2 beats + 500ms buffer
-      
+
       setTimeout(() => {
         setIsSettingBpm(false);
         tapTimesRef.current = [];
@@ -78,14 +78,14 @@ const App = () => {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.repeat) return;
-      
+
       // Handle spacebar for BPM tapping
       if (event.code === 'Space') {
         event.preventDefault();
         handleBpmTap();
         return;
       }
-      
+
       // Handle clip key bindings
       const clipId = clipKeyBindings[event.key];
       if (!clipId) return;
@@ -132,7 +132,7 @@ const App = () => {
   // Computed rendering state based on transitions
   const renderingEffects = Object.fromEntries(
     Object.values(ShaderEffect).map(effect => [
-      effect, 
+      effect,
       effectTransitions[effect].isActive
     ])
   ) as Record<ShaderEffect, boolean>;
@@ -141,16 +141,17 @@ const App = () => {
     Object.values(ShaderEffect).map(effect => {
       const transition = effectTransitions[effect];
       const effectDef = shaderEffects[effect];
-      
+
       // For effects with intensity controls, use the actual value (including 0)
       // For effects without intensity controls, default to 1
-      const userIntensity = effectDef.intensity !== undefined 
-        ? effectIntensities[effect] 
+      const hasIntensityControl = effectDef.intensity !== undefined;
+      const userIntensity = hasIntensityControl
+        ? (effectIntensities[effect] ?? effectDef.intensity)
         : 1;
-        
+
       return [effect, transition.currentIntensity * userIntensity];
     })
-      ) as Record<ShaderEffect, number>;
+  ) as Record<ShaderEffect, number>;
 
   const [showPanel, setShowPanel] = useState(false);
   const [inputSource, setInputSource] = useState("webcam");
@@ -181,19 +182,30 @@ const App = () => {
   // Load settings from localStorage on mount only
   useEffect(() => {
     const savedSettings = settingsService.loadSettings();
-    
+
     if (savedSettings.showHelp !== undefined) setShowHelp(savedSettings.showHelp);
     if (savedSettings.isMuted !== undefined) setIsMuted(savedSettings.isMuted);
     if (savedSettings.inputSource !== undefined) setInputSource(savedSettings.inputSource);
     if (savedSettings.activeEffects !== undefined) setActiveEffects(savedSettings.activeEffects);
-    if (savedSettings.effectIntensities !== undefined) setEffectIntensities(savedSettings.effectIntensities);
+    if (savedSettings.effectIntensities !== undefined) {
+      // Merge saved intensities with defaults to handle newly added effects
+      setEffectIntensities(prev => {
+        const merged = { ...prev };
+        Object.entries(savedSettings.effectIntensities!).forEach(([effect, intensity]) => {
+          if (intensity !== undefined && !isNaN(intensity)) {
+            merged[effect as ShaderEffect] = intensity;
+          }
+        });
+        return merged;
+      });
+    }
     if (savedSettings.loopClips !== undefined) setLoopClips(savedSettings.loopClips);
     if (savedSettings.bpm !== undefined) setBpm(savedSettings.bpm);
   }, []); // Empty dependency array - only run on mount
 
   // Save settings when they change (not on initialization)
   const [isInitialized, setIsInitialized] = useState(false);
-  
+
   useEffect(() => {
     // Skip saving during initial load
     if (!isInitialized) {
@@ -244,27 +256,27 @@ const App = () => {
   // Animation loop for smooth transitions
   useEffect(() => {
     let animationFrameId: number;
-    
+
     function animate() {
       const now = performance.now();
-      
+
       setEffectTransitions(currentTransitions => {
         const newTransitions = updateTransitions(currentTransitions, now);
-        
+
         // Continue animation if there are active transitions
         if (hasActiveTransitions(newTransitions)) {
           animationFrameId = requestAnimationFrame(animate);
         }
-        
+
         return newTransitions;
       });
     }
-    
+
     // Start animation loop if there are active transitions
     if (hasActiveTransitions(effectTransitions)) {
       animationFrameId = requestAnimationFrame(animate);
     }
-    
+
     return () => {
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
@@ -301,7 +313,7 @@ const App = () => {
         .catch(console.error);
     } else if (inputSource === "video") {
       videoElement.pause();
-      
+
       if (selectedVideoFile) {
         // Use the user-selected video file
         const fileUrl = URL.createObjectURL(selectedVideoFile);
@@ -312,10 +324,10 @@ const App = () => {
         videoElement.src =
           "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
       }
-      
+
       videoElement.loop = true;
       videoElement.load();
-      
+
       // Add a small delay before playing to ensure the video is loaded
       setTimeout(() => {
         videoElement
@@ -366,7 +378,7 @@ const App = () => {
   const handleCheckboxChange = useCallback((effect: ShaderEffect) => {
     const nextEffect = !activeEffects[effect];
     const now = performance.now();
-    
+
     // Update UI state immediately for responsive feel
     setActiveEffects((prev) => ({
       ...prev,
@@ -385,7 +397,7 @@ const App = () => {
       ...prev,
       [effect]: intensity,
     }));
-    
+
     // If effect has an active transition, update the target intensity
     setEffectTransitions(currentTransitions => {
       const transition = currentTransitions[effect];
@@ -458,25 +470,25 @@ const App = () => {
             zIndex: 10,
           }}
         >
-                  <ControlPanel
-          activeEffects={activeEffects}
-          bpm={bpm}
-          effectIntensities={effectIntensities}
-          inputSource={inputSource}
-          isSettingBpm={isSettingBpm}
-          loopClips={loopClips}
-          isMuted={isMuted}
-          onInputSourceChange={handleInputSourceChange}
-          onFileSelected={handleFileSelected}
-          onIntensityChange={handleIntensityChange}
-          onLoopToggle={handleLoopToggle}
-          onMuteToggle={handleMuteToggle}
-          onPlayToggle={handlePlayToggle}
-          onToggleEffect={handleCheckboxChange}
-          onToggleHelp={() => setShowHelp((prev) => !prev)}
-          playingClips={playingClips}
-          showHelp={showHelp}
-        />
+          <ControlPanel
+            activeEffects={activeEffects}
+            bpm={bpm}
+            effectIntensities={effectIntensities}
+            inputSource={inputSource}
+            isSettingBpm={isSettingBpm}
+            loopClips={loopClips}
+            isMuted={isMuted}
+            onInputSourceChange={handleInputSourceChange}
+            onFileSelected={handleFileSelected}
+            onIntensityChange={handleIntensityChange}
+            onLoopToggle={handleLoopToggle}
+            onMuteToggle={handleMuteToggle}
+            onPlayToggle={handlePlayToggle}
+            onToggleEffect={handleCheckboxChange}
+            onToggleHelp={() => setShowHelp((prev) => !prev)}
+            playingClips={playingClips}
+            showHelp={showHelp}
+          />
         </div>
       )}
 
