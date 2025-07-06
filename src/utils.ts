@@ -106,9 +106,12 @@ export const shaderEffects: Record<ShaderEffect, ShaderEffectDef> = {
     stage: "mapping",
     glsl: `
       {
+        // Convert time to beats and make the cycle last exactly 8 beats
+        float beatTime = (u_time * u_bpm) / 60.0;
+        
         vec2 c = uv*2.0-1.0;
         float r = length(c);
-        float a = atan(c.y,c.x) + r*3.0*sin(u_time);
+        float a = atan(c.y,c.x) + r*3.0*sin(beatTime * 0.78539816339); // 0.78539816339 = PI/4
         uv = (vec2(cos(a),sin(a)) * r + 1.0) * 0.5;
       }
     `,

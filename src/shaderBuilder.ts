@@ -37,6 +37,7 @@ export function createEffectShader(effect: ShaderEffect): string {
       precision mediump float;
       uniform sampler2D u_image;
       uniform float u_time;
+      uniform float u_bpm;
       ${intensityUniform}
       varying vec2 v_texCoord;
       
@@ -56,6 +57,7 @@ export function createEffectShader(effect: ShaderEffect): string {
       precision mediump float;
       uniform sampler2D u_image;
       uniform float u_time;
+      uniform float u_bpm;
       ${intensityUniform}
       varying vec2 v_texCoord;
       

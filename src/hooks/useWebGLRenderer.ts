@@ -166,6 +166,7 @@ export function useWebGLRenderer({
       const uniformLocations: Record<string, WebGLUniformLocation | null> = {
         image: gl.getUniformLocation(effectProgram, 'u_image'),
         time: gl.getUniformLocation(effectProgram, 'u_time'),
+        bpm: gl.getUniformLocation(effectProgram, 'u_bpm'),
       };
       
       // Add intensity uniform if effect supports it
@@ -393,6 +394,7 @@ export function useWebGLRenderer({
           gl.bindTexture(gl.TEXTURE_2D, currentTexture);
           gl.uniform1i(effectShader.uniformLocations.image, 0);
           gl.uniform1f(effectShader.uniformLocations.time, now / 1000);
+          gl.uniform1f(effectShader.uniformLocations.bpm, bpm);
           
           // Set intensity if effect supports it
           const intensityLocation = effectShader.uniformLocations[`intensity_${effect}`];
