@@ -186,6 +186,14 @@ const App = () => {
   // Popup window reference
   const popupWindowRef = useRef<Window | null>(null);
 
+  // Performance tracking callback for WebGL renderer
+  const handleRenderPerformance = useCallback((renderFps: number, frameTimeMs: number) => {
+    setFps(renderFps);
+    setFrameTime(frameTimeMs);
+  }, []);
+
+
+
   // Load settings from localStorage on mount only
   useEffect(() => {
     const savedSettings = settingsService.loadSettings();
@@ -290,13 +298,6 @@ const App = () => {
       }
     };
   }, [effectTransitions]); // Re-run when transitions change
-
-  // FPS tracking loop
-  // Performance tracking callback for WebGL renderer
-  const handleRenderPerformance = useCallback((renderFps: number, frameTimeMs: number) => {
-    setFps(renderFps);
-    setFrameTime(frameTimeMs);
-  }, []);
 
   // Input Source Setup
   useEffect(() => {
@@ -455,6 +456,8 @@ const App = () => {
   const handleMuteToggle = () => {
     setIsMuted((prev) => !prev);
   };
+
+
 
   // Popup window handlers
   const openPopupWindow = useCallback(() => {
@@ -825,14 +828,6 @@ const App = () => {
         popupWindowRef.current = null;
       });
     }
-  }, []);
-
-  const closePopupWindow = useCallback(() => {
-    if (popupWindowRef.current && !popupWindowRef.current.closed) {
-      popupWindowRef.current.close();
-    }
-    setIsPopupOpen(false);
-    popupWindowRef.current = null;
   }, []);
 
   // Clean up popup on unmount
