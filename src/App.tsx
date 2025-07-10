@@ -504,7 +504,7 @@ const App = () => {
 
       // Setup popup window
       popup.document.title = 'Trippy Vids Controls';
-      
+
       // Copy all CSS from parent window to popup
       const styles = Array.from(document.styleSheets);
       styles.forEach((styleSheet) => {
@@ -526,15 +526,6 @@ const App = () => {
           // Some stylesheets might not be accessible due to CORS - ignore silently
         }
       });
-
-      // Create popup structure
-      const header = popup.document.createElement('div');
-      header.className = 'popup-header';
-      header.innerHTML = `
-        <span>Trippy Vids Controls</span>
-        <button class="popup-close-btn" onclick="window.close()">Close Popup</button>
-      `;
-      popup.document.body.appendChild(header);
 
       // Create container for React content
       const container = popup.document.createElement('div');
