@@ -10,6 +10,7 @@ import {
   type EffectTransitions
 } from "./transitions";
 import { settingsService } from "./services/settingsService";
+import { useMidi, type MidiConfig } from "./hooks/useMidi";
 import ControlPanel from "./ControlPanel";
 
 const clipKeyBindings: Record<string, string> = {
@@ -182,7 +183,8 @@ const App = () => {
   const [fps, setFps] = useState(0);
   const [frameTime, setFrameTime] = useState(0);
   const [isPopupOpen, setIsPopupOpen] = useState(false);
-  
+  const [showMidiSyncNotification, setShowMidiSyncNotification] = useState(false);
+
   // Popup window reference
   const popupWindowRef = useRef<Window | null>(null);
 
@@ -192,8 +194,6 @@ const App = () => {
     setFrameTime(frameTimeMs);
   }, []);
 
-
-
   // Load settings from localStorage on mount only
   useEffect(() => {
     const savedSettings = settingsService.loadSettings();
@@ -202,18 +202,7 @@ const App = () => {
     if (savedSettings.isMuted !== undefined) setIsMuted(savedSettings.isMuted);
     if (savedSettings.inputSource !== undefined) setInputSource(savedSettings.inputSource);
     if (savedSettings.activeEffects !== undefined) setActiveEffects(savedSettings.activeEffects);
-    if (savedSettings.effectIntensities !== undefined) {
-      // Merge saved intensities with defaults to handle newly added effects
-      setEffectIntensities(prev => {
-        const merged = { ...prev };
-        Object.entries(savedSettings.effectIntensities!).forEach(([effect, intensity]) => {
-          if (intensity !== undefined && !isNaN(intensity)) {
-            merged[effect as ShaderEffect] = intensity;
-          }
-        });
-        return merged;
-      });
-    }
+    // No longer loading effectIntensities from localStorage - they should be controlled by MIDI only
     if (savedSettings.loopClips !== undefined) setLoopClips(savedSettings.loopClips);
     if (savedSettings.bpm !== undefined) setBpm(savedSettings.bpm);
   }, []); // Empty dependency array - only run on mount
@@ -245,10 +234,7 @@ const App = () => {
     settingsService.saveActiveEffects(activeEffects);
   }, [activeEffects, isInitialized]);
 
-  useEffect(() => {
-    if (!isInitialized) return;
-    settingsService.saveEffectIntensities(effectIntensities);
-  }, [effectIntensities, isInitialized]);
+  // No longer saving effectIntensities to localStorage - they should be controlled by MIDI only
 
   useEffect(() => {
     if (!isInitialized) return;
@@ -391,22 +377,38 @@ const App = () => {
     onRenderPerformance: handleRenderPerformance,
   });
 
+
+
+  // Debounce to prevent rapid MIDI triggers
+  const lastToggleTime = useRef<Record<string, number>>({});
+
   const handleCheckboxChange = useCallback((effect: ShaderEffect) => {
-    const nextEffect = !activeEffects[effect];
     const now = performance.now();
 
-    // Update UI state immediately for responsive feel
-    setActiveEffects((prev) => ({
-      ...prev,
-      [effect]: nextEffect,
-    }));
+    // Debounce: ignore rapid successive calls for the same effect
+    const lastTime = lastToggleTime.current[effect] || 0;
+    if (now - lastTime < 50) { // 50ms debounce
+      return;
+    }
+    lastToggleTime.current[effect] = now;
 
-    // Start smooth transition
-    setEffectTransitions(currentTransitions => {
-      const targetIntensity = nextEffect ? 1 : 0;
-      return startTransition(currentTransitions, effect, targetIntensity, now);
+    // Use functional update to get current state - fixes stale closure issue
+    setActiveEffects((prev) => {
+      const nextEffect = !prev[effect];
+
+      // Start smooth transition with current state
+      setEffectTransitions(currentTransitions => {
+        const targetIntensity = nextEffect ? 1 : 0;
+        const newTransitions = startTransition(currentTransitions, effect, targetIntensity, now);
+        return newTransitions;
+      });
+
+      return {
+        ...prev,
+        [effect]: nextEffect,
+      };
     });
-  }, [activeEffects]);
+  }, []); // Empty dependency array - no stale closure!
 
   const handleIntensityChange = useCallback((effect: ShaderEffect, intensity: number) => {
     setEffectIntensities((prev) => ({
@@ -457,7 +459,31 @@ const App = () => {
     setIsMuted((prev) => !prev);
   };
 
+  // MIDI hook configuration
+  const midiConfig: MidiConfig = useMemo(() => ({
+    onEffectToggle: (effect: ShaderEffect) => {
+      handleCheckboxChange(effect);
+    },
+    onIntensityChange: (effect: ShaderEffect, intensity: number) => {
+      setEffectIntensities(prev => ({
+        ...prev,
+        [effect]: intensity
+      }));
+    },
+    onBpmTap: () => {
+      handleBpmTap();
+    },
+    onMidiConnect: () => {
+      // Show notification to sync knobs
+      setShowMidiSyncNotification(true);
+      // Hide notification after 5 seconds
+      setTimeout(() => {
+        setShowMidiSyncNotification(false);
+      }, 5000);
+    },
+  }), [handleCheckboxChange, handleBpmTap]);
 
+  const midi = useMidi(midiConfig);
 
   // Popup window handlers
   const openPopupWindow = useCallback(() => {
@@ -469,7 +495,7 @@ const App = () => {
     const popup = window.open(
       '',
       'controlPanel',
-      'width=400,height=600,resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no,status=no'
+      'width=450,height=700,resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no,status=no,left=100,top=100'
     );
 
     if (popup) {
@@ -478,336 +504,29 @@ const App = () => {
 
       // Setup popup window
       popup.document.title = 'Trippy Vids Controls';
-      popup.document.head.innerHTML = `
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-          body {
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-              'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-              sans-serif;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-            background-color: #f5f5f5;
-          }
-          * {
-            box-sizing: border-box;
-          }
-          
-          /* ControlPanel.css styles */
-          .control-panel {
-            background-color: white;
-            color: black;
-            padding: 0;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
-            width: 100%;
-            overflow: hidden;
-            margin: 20px;
-            max-width: calc(100% - 40px);
-          }
-          
-          .tab-header {
-            display: flex;
-            border-bottom: 1px solid #ddd;
-            background-color: #f8f9fa;
-          }
-          
-          .tab-button {
-            flex: 1;
-            padding: 12px 16px;
-            border: none;
-            background: none;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            color: #666;
-            transition: all 0.2s ease;
-            border-bottom: 2px solid transparent;
-          }
-          
-          .tab-button:hover {
-            background-color: #e9ecef;
-            color: #333;
-          }
-          
-          .tab-button.active {
-            color: #007bff;
-            border-bottom-color: #007bff;
-            background-color: white;
-          }
-          
-          .tab-content {
-            padding: 20px;
-            max-height: calc(100vh - 120px);
-            overflow-y: auto;
-          }
-          
-          .control-group {
-            margin-bottom: 16px;
-          }
-          
-          .control-label {
-            display: block;
-            font-weight: 500;
-            margin-bottom: 6px;
-            color: #333;
-          }
-          
-          .control-select {
-            width: 100%;
-            padding: 8px 12px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            background-color: white;
-            color: #333;
-            font-size: 14px;
-            cursor: pointer;
-          }
-          
-          .control-select:focus {
-            outline: none;
-            border-color: #007bff;
-            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
-          }
-          
-          .control-checkbox {
-            margin-right: 8px;
-          }
-          
-          .checkbox-label {
-            font-size: 14px;
-            color: #333;
-            cursor: pointer;
-            user-select: none;
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-            transition: color 0.2s ease;
-          }
-          
-          .checkbox-label:hover {
-            color: #007bff;
-          }
-          
-          .checkbox-group {
-            display: flex;
-            align-items: center;
-            padding: 4px 0;
-            border-radius: 4px;
-            transition: background-color 0.2s ease;
-          }
-          
-          .checkbox-group:hover {
-            background-color: #f8f9fa;
-          }
-          
-          .effect-item {
-            margin-bottom: 10px;
-          }
-          
-          .intensity-control {
-            margin-top: 5px;
-            margin-left: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-          }
-          
-          .intensity-slider {
-            flex: 1;
-            height: 4px;
-            border-radius: 2px;
-            background: #ddd;
-            outline: none;
-            -webkit-appearance: none;
-          }
-          
-          .intensity-slider::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            background: #007bff;
-            cursor: pointer;
-          }
-          
-          .intensity-slider::-moz-range-thumb {
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            background: #007bff;
-            cursor: pointer;
-            border: none;
-          }
-          
-          .intensity-slider:disabled {
-            background: #f0f0f0;
-            cursor: not-allowed;
-            opacity: 0.6;
-          }
-          
-          .intensity-value {
-            font-size: 12px;
-            color: #666;
-            min-width: 30px;
-            text-align: right;
-          }
-          
-          .clips-container {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-          }
-          
-          .clip-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px;
-            background-color: #f8f9fa;
-            border-radius: 4px;
-            border: 1px solid #e9ecef;
-          }
-          
-          .clip-name {
-            flex: 1;
-            font-size: 14px;
-            color: #333;
-          }
-          
-          .play-button {
-            background: none;
-            border: none;
-            color: black;
-            cursor: pointer;
-          }
-          
-          .control-description {
-            font-size: 12px;
-            color: #666;
-            margin: 5px 0 0 0;
-            font-style: italic;
-          }
-          
-          .drop-zone {
-            border: 2px dashed #ddd;
-            border-radius: 8px;
-            padding: 20px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            background-color: #fafafa;
-          }
-          
-          .drop-zone:hover {
-            border-color: #007bff;
-            background-color: #f0f8ff;
-          }
-          
-          .drop-zone-content {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 8px;
-          }
-          
-          .drop-zone-icon {
-            font-size: 24px;
-            opacity: 0.6;
-          }
-          
-          .drop-zone-text {
-            font-weight: 500;
-            color: #333;
-          }
-          
-          .drop-zone-subtext {
-            font-size: 12px;
-            color: #666;
-          }
-          
-          .playback-toolbar {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 8px;
-            background-color: #f8f9fa;
-            border-radius: 6px;
-            border: 1px solid #e9ecef;
-          }
-          
-          .mute-button {
-            padding: 8px 12px;
-            border: none;
-            border-radius: 4px;
-            background-color: #6c757d;
-            color: white;
-            font-size: 16px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 40px;
-            height: 40px;
-          }
-          
-          .mute-button:hover {
-            background-color: #5a6268;
-            transform: scale(1.05);
-          }
-          
-          .mute-button.muted {
-            background-color: #dc3545;
-          }
-          
-          .playback-status {
-            font-size: 14px;
-            color: #495057;
-            font-weight: 500;
-          }
-          
-          .placeholder-section {
-            padding: 16px;
-            background-color: #f8f9fa;
-            border-radius: 6px;
-            border: 1px solid #e9ecef;
-          }
-          
-          .popup-header {
-            padding: 15px 20px;
-            background-color: #007bff;
-            color: white;
-            margin: 0;
-            font-size: 16px;
-            font-weight: 500;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-          }
-          
-          .popup-close-btn {
-            background: rgba(255, 255, 255, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            color: white;
-            font-size: 12px;
-            cursor: pointer;
-            padding: 6px 12px;
-            border-radius: 4px;
-            font-weight: 500;
-            transition: background-color 0.2s ease;
-          }
-          
-          .popup-close-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
-          }
-        </style>
-      `;
       
+      // Copy all CSS from parent window to popup
+      const styles = Array.from(document.styleSheets);
+      styles.forEach((styleSheet) => {
+        try {
+          if (styleSheet.href) {
+            // External stylesheet
+            const link = popup.document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = styleSheet.href;
+            popup.document.head.appendChild(link);
+          } else if (styleSheet.cssRules) {
+            // Inline styles
+            const style = popup.document.createElement('style');
+            const cssText = Array.from(styleSheet.cssRules).map(rule => rule.cssText).join('\n');
+            style.textContent = cssText;
+            popup.document.head.appendChild(style);
+          }
+        } catch (e) {
+          // Some stylesheets might not be accessible due to CORS - ignore silently
+        }
+      });
+
       // Create popup structure
       const header = popup.document.createElement('div');
       header.className = 'popup-header';
@@ -816,7 +535,7 @@ const App = () => {
         <button class="popup-close-btn" onclick="window.close()">Close Popup</button>
       `;
       popup.document.body.appendChild(header);
-      
+
       // Create container for React content
       const container = popup.document.createElement('div');
       container.id = 'popup-root';
@@ -844,10 +563,10 @@ const App = () => {
     if (!isPopupOpen || !popupWindowRef.current || popupWindowRef.current.closed) {
       return null;
     }
-    
+
     const popupContainer = popupWindowRef.current.document.getElementById('popup-root');
     if (!popupContainer) return null;
-    
+
     return createPortal(
       <ControlPanel
         activeEffects={activeEffects}
@@ -857,6 +576,9 @@ const App = () => {
         isSettingBpm={isSettingBpm}
         loopClips={loopClips}
         isMuted={isMuted}
+        midiConnected={midi.connected}
+        midiDeviceName={midi.deviceName}
+        isPopupMode={true}
         onInputSourceChange={handleInputSourceChange}
         onFileSelected={handleFileSelected}
         onIntensityChange={handleIntensityChange}
@@ -879,6 +601,8 @@ const App = () => {
     loopClips,
     bpm,
     isMuted,
+    midi.connected,
+    midi.deviceName,
     playingClips,
     showHelp,
     handleInputSourceChange,
@@ -927,6 +651,8 @@ const App = () => {
             isSettingBpm={isSettingBpm}
             loopClips={loopClips}
             isMuted={isMuted}
+            midiConnected={midi.connected}
+            midiDeviceName={midi.deviceName}
             onInputSourceChange={handleInputSourceChange}
             onFileSelected={handleFileSelected}
             onIntensityChange={handleIntensityChange}
@@ -940,7 +666,7 @@ const App = () => {
           />
         </div>
       )}
-      
+
       {showPanel && !isPopupOpen && (
         <div
           style={{
@@ -984,10 +710,35 @@ const App = () => {
           <div>Right click to show controls | Spacebar to tap BPM | Q/W/E/R for beat-based clips | "Pop Out Controls" to detach panel</div>
           <div style={{ fontSize: "12px", marginTop: "5px", opacity: 0.8 }}>
             GPU FPS: {fps} | Frame Time: {frameTime.toFixed(2)}ms
+            {midi.connected && (
+              <span style={{ color: "#00ff00", marginLeft: "10px" }}>
+                🎹 MIDI: {midi.deviceName}
+              </span>
+            )}
+            {!midi.connected && (
+              <span style={{ color: "#ff6666", marginLeft: "10px" }}>
+                🎹 MIDI: Not connected
+              </span>
+            )}
           </div>
+          {showMidiSyncNotification && (
+            <div style={{
+              fontSize: "14px",
+              marginTop: "10px",
+              color: "#ffff00",
+              backgroundColor: "rgba(0, 0, 0, 0.8)",
+              padding: "10px 20px",
+              borderRadius: "4px",
+              display: "inline-block",
+              pointerEvents: "none",
+              animation: "fadeIn 0.3s ease-in-out"
+            }}>
+              🎛️ MIDI Connected! Move each knob slightly to sync with current positions
+            </div>
+          )}
         </div>
       )}
-      
+
       {popupControlPanel}
     </div>
   );

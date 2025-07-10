@@ -5,7 +5,6 @@ const STORAGE_KEYS = {
   MUTED: 'trippy-vids-muted',
   INPUT_SOURCE: 'trippy-vids-inputSource',
   ACTIVE_EFFECTS: 'trippy-vids-activeEffects',
-  EFFECT_INTENSITIES: 'trippy-vids-effectIntensities',
   LOOP_CLIPS: 'trippy-vids-loopClips',
   BPM: 'trippy-vids-bpm',
 } as const;
@@ -15,7 +14,6 @@ export interface AppSettings {
   isMuted: boolean;
   inputSource: string;
   activeEffects: Record<ShaderEffect, boolean>;
-  effectIntensities: Record<ShaderEffect, number>;
   loopClips: Record<string, boolean>;
   bpm: number;
 }
@@ -37,9 +35,6 @@ export const settingsService = {
 
       const activeEffects = localStorage.getItem(STORAGE_KEYS.ACTIVE_EFFECTS);
       if (activeEffects) settings.activeEffects = JSON.parse(activeEffects);
-
-      const effectIntensities = localStorage.getItem(STORAGE_KEYS.EFFECT_INTENSITIES);
-      if (effectIntensities) settings.effectIntensities = JSON.parse(effectIntensities);
 
       const loopClips = localStorage.getItem(STORAGE_KEYS.LOOP_CLIPS);
       if (loopClips) settings.loopClips = JSON.parse(loopClips);
@@ -87,13 +82,6 @@ export const settingsService = {
     }
   },
 
-  saveEffectIntensities(value: Record<ShaderEffect, number>): void {
-    try {
-      localStorage.setItem(STORAGE_KEYS.EFFECT_INTENSITIES, JSON.stringify(value));
-    } catch (error) {
-      console.warn('Failed to save effectIntensities setting:', error);
-    }
-  },
 
   saveLoopClips(value: Record<string, boolean>): void {
     try {

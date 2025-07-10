@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { ShaderEffect } from "./utils";
-import { InputTab, ClipsTab, EffectsTab } from "./components";
+import { InputTab, ClipsTab, EffectsTab, MidiTab } from "./components";
 import "./ControlPanel.css";
 
 interface ControlPanelProps {
@@ -11,6 +11,9 @@ interface ControlPanelProps {
   isSettingBpm: boolean;
   loopClips: Record<string, boolean>;
   isMuted: boolean;
+  midiConnected: boolean;
+  midiDeviceName: string;
+  isPopupMode?: boolean;
   onInputSourceChange: (newSource: string) => void;
   onFileSelected: (file: File) => void;
   onIntensityChange: (effect: ShaderEffect, intensity: number) => void;
@@ -23,7 +26,7 @@ interface ControlPanelProps {
   showHelp: boolean;
 }
 
-type TabType = 'input' | 'clips' | 'effects';
+type TabType = 'input' | 'clips' | 'effects' | 'midi';
 
 const ControlPanel: React.FC<ControlPanelProps> = ({
   activeEffects,
@@ -33,6 +36,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   isSettingBpm,
   loopClips,
   isMuted,
+  midiConnected,
+  midiDeviceName,
+  isPopupMode = false,
   onInputSourceChange,
   onFileSelected,
   onIntensityChange,
@@ -47,25 +53,31 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   const [activeTab, setActiveTab] = useState<TabType>('input');
 
   return (
-    <div className="control-panel">
+    <div className={`control-panel ${isPopupMode ? 'popup' : ''}`}>
       <div className="tab-header">
-        <button 
+        <button
           className={`tab-button ${activeTab === 'input' ? 'active' : ''}`}
           onClick={() => setActiveTab('input')}
         >
           Input
         </button>
-        <button 
+        <button
           className={`tab-button ${activeTab === 'clips' ? 'active' : ''}`}
           onClick={() => setActiveTab('clips')}
         >
           Clips
         </button>
-        <button 
+        <button
           className={`tab-button ${activeTab === 'effects' ? 'active' : ''}`}
           onClick={() => setActiveTab('effects')}
         >
           Effects
+        </button>
+        <button
+          className={`tab-button ${activeTab === 'midi' ? 'active' : ''}`}
+          onClick={() => setActiveTab('midi')}
+        >
+          MIDI
         </button>
       </div>
 
@@ -102,6 +114,18 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           onToggleEffect={onToggleEffect}
           showHelp={showHelp}
           onToggleHelp={onToggleHelp}
+          midiConnected={midiConnected}
+          isPopupMode={isPopupMode}
+        />
+      )}
+
+      {activeTab === 'midi' && (
+        <MidiTab
+          midiConnected={midiConnected}
+          midiDeviceName={midiDeviceName}
+          showHelp={showHelp}
+          onToggleHelp={onToggleHelp}
+          isPopupMode={isPopupMode}
         />
       )}
     </div>
