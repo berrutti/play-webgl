@@ -22,7 +22,6 @@ interface ControlPanelProps {
   onPlayToggle: (clipId: string) => void;
   onToggleEffect: (effect: ShaderEffect) => void;
   onToggleHelp: () => void;
-  onBpmTap: () => void;
   playingClips: Record<string, boolean>;
   showHelp: boolean;
 }
@@ -48,7 +47,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onPlayToggle,
   onToggleEffect,
   onToggleHelp,
-  onBpmTap,
   playingClips,
   showHelp,
 }) => {
@@ -113,9 +111,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           midiConnected={midiConnected}
           midiDeviceName={midiDeviceName}
           isPopupMode={isPopupMode}
-          bpm={bpm}
-          isSettingBpm={isSettingBpm}
-          onBpmTap={onBpmTap}
         />
       )}
     </div>
