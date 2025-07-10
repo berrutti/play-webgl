@@ -5,7 +5,6 @@ import { ShaderEffect } from '../utils';
 export interface MidiConfig {
   onEffectToggle: (effect: ShaderEffect) => void;
   onIntensityChange: (effect: ShaderEffect, intensity: number) => void;
-  onBpmTap: () => void;
   onMidiConnect?: () => void; // Called when MIDI connection is established
 }
 
@@ -37,11 +36,7 @@ export const useMidi = (config: MidiConfig): MidiState => {
     36: ShaderEffect.GRAYSCALE,
     37: ShaderEffect.KALEIDOSCOPE,
     38: ShaderEffect.SWIRL,
-    39: null, // Unused
-    //44: undefined,
-    //45: undefined,
-    //46: undefined,
-    47: 'BPM_TAP',
+    // Remove: 47: 'BPM_TAP', - just leave unmapped
   };
 
   // Direct mapping from CC numbers to effects
@@ -70,10 +65,7 @@ export const useMidi = (config: MidiConfig): MidiState => {
         return;
       }
 
-      // Check special functions
-      if (effect === 'BPM_TAP') {
-        config.onBpmTap();
-      }
+      // Remove BPM tap handling
     });
 
     // Handle knob turns

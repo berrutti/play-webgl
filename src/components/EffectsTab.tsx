@@ -9,6 +9,7 @@ interface EffectsTabProps {
   showHelp: boolean;
   onToggleHelp: () => void;
   midiConnected?: boolean;
+  midiDeviceName?: string;
   isPopupMode?: boolean;
 }
 
@@ -20,6 +21,7 @@ export const EffectsTab: React.FC<EffectsTabProps> = ({
   showHelp,
   onToggleHelp,
   midiConnected = false,
+  midiDeviceName = '',
   isPopupMode = false,
 }) => {
   // Get effects controlled by MIDI knobs
@@ -133,8 +135,11 @@ export const EffectsTab: React.FC<EffectsTabProps> = ({
         <div className="midi-status">
           <div className="control-group">
             <div className="midi-indicator">
-              🎹 MIDI Connected
+              🎹 MIDI Connected: {midiDeviceName}
             </div>
+            <p className="control-description">
+              🎛️ Knobs 1-7 control intensity • 🟨 Top row pads: toggle + knob control • 🟦 Bottom row pads: toggle only
+            </p>
           </div>
         </div>
       )}

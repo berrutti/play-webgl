@@ -12,6 +12,9 @@ import {
 import { settingsService } from "./services/settingsService";
 import { useMidi, type MidiConfig } from "./hooks/useMidi";
 import ControlPanel from "./ControlPanel";
+import packageJson from "../package.json";
+
+const VERSION = packageJson.version;
 
 const clipKeyBindings: Record<string, string> = {
   q: clips[0].id,
@@ -470,9 +473,6 @@ const App = () => {
         [effect]: intensity
       }));
     },
-    onBpmTap: () => {
-      handleBpmTap();
-    },
     onMidiConnect: () => {
       // Show notification to sync knobs
       setShowMidiSyncNotification(true);
@@ -481,7 +481,7 @@ const App = () => {
         setShowMidiSyncNotification(false);
       }, 5000);
     },
-  }), [handleCheckboxChange, handleBpmTap]);
+  }), [handleCheckboxChange]);
 
   const midi = useMidi(midiConfig);
 
@@ -602,7 +602,7 @@ const App = () => {
     handleLoopToggle,
     handleMuteToggle,
     handlePlayToggle,
-    handleCheckboxChange
+    handleCheckboxChange,
   ]);
 
   return (
@@ -700,7 +700,7 @@ const App = () => {
         >
           <div>Right click to show controls | Spacebar to tap BPM | Q/W/E/R for beat-based clips | "Pop Out Controls" to detach panel</div>
           <div style={{ fontSize: "12px", marginTop: "5px", opacity: 0.8 }}>
-            GPU FPS: {fps} | Frame Time: {frameTime.toFixed(2)}ms
+            Version: {VERSION} | GPU FPS: {fps} | Frame Time: {frameTime.toFixed(2)}ms
             {midi.connected && (
               <span style={{ color: "#00ff00", marginLeft: "10px" }}>
                 🎹 MIDI: {midi.deviceName}

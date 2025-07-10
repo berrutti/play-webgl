@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { ShaderEffect } from "./utils";
-import { InputTab, ClipsTab, EffectsTab, MidiTab } from "./components";
+import { InputTab, ClipsTab, EffectsTab } from "./components";
 import "./ControlPanel.css";
 
 interface ControlPanelProps {
@@ -22,11 +22,12 @@ interface ControlPanelProps {
   onPlayToggle: (clipId: string) => void;
   onToggleEffect: (effect: ShaderEffect) => void;
   onToggleHelp: () => void;
+  onBpmTap: () => void;
   playingClips: Record<string, boolean>;
   showHelp: boolean;
 }
 
-type TabType = 'input' | 'clips' | 'effects' | 'midi';
+type TabType = 'input' | 'clips' | 'effects';
 
 const ControlPanel: React.FC<ControlPanelProps> = ({
   activeEffects,
@@ -47,6 +48,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onPlayToggle,
   onToggleEffect,
   onToggleHelp,
+  onBpmTap,
   playingClips,
   showHelp,
 }) => {
@@ -72,12 +74,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           onClick={() => setActiveTab('effects')}
         >
           Effects
-        </button>
-        <button
-          className={`tab-button ${activeTab === 'midi' ? 'active' : ''}`}
-          onClick={() => setActiveTab('midi')}
-        >
-          MIDI
         </button>
       </div>
 
@@ -115,17 +111,11 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           showHelp={showHelp}
           onToggleHelp={onToggleHelp}
           midiConnected={midiConnected}
-          isPopupMode={isPopupMode}
-        />
-      )}
-
-      {activeTab === 'midi' && (
-        <MidiTab
-          midiConnected={midiConnected}
           midiDeviceName={midiDeviceName}
-          showHelp={showHelp}
-          onToggleHelp={onToggleHelp}
           isPopupMode={isPopupMode}
+          bpm={bpm}
+          isSettingBpm={isSettingBpm}
+          onBpmTap={onBpmTap}
         />
       )}
     </div>
