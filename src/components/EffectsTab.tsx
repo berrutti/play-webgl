@@ -29,7 +29,7 @@ export const EffectsTab: React.FC<EffectsTabProps> = ({
     if (!midiConnected) return [];
     return [
       ShaderEffect.INVERT,
-      ShaderEffect.SINE_WAVE,
+      ShaderEffect.REALITY_GLITCH,
       ShaderEffect.DISPLACE,
       ShaderEffect.CHROMA,
       ShaderEffect.PIXELATE,
@@ -44,7 +44,7 @@ export const EffectsTab: React.FC<EffectsTabProps> = ({
   const popupEffects = [
     // Top row (8 elements)
     ShaderEffect.INVERT,
-    ShaderEffect.SINE_WAVE,
+    ShaderEffect.REALITY_GLITCH,
     ShaderEffect.DISPLACE,
     ShaderEffect.CHROMA,
     ShaderEffect.PIXELATE,
@@ -65,7 +65,7 @@ export const EffectsTab: React.FC<EffectsTabProps> = ({
   // For regular mode - all effects
   const regularEffects = [
     ShaderEffect.INVERT,
-    ShaderEffect.SINE_WAVE,
+    ShaderEffect.REALITY_GLITCH,
     ShaderEffect.DISPLACE,
     ShaderEffect.CHROMA,
     ShaderEffect.PIXELATE,

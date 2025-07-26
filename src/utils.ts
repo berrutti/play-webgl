@@ -2,7 +2,7 @@
 export enum ShaderEffect {
   INVERT = "INVERT",
   GRAYSCALE = "GRAYSCALE",
-  SINE_WAVE = "SINE_WAVE",
+  REALITY_GLITCH = "REALITY_GLITCH",
   KALEIDOSCOPE = "KALEIDOSCOPE",
   DISPLACE = "DISPLACE",
   SWIRL = "SWIRL",
@@ -34,12 +34,90 @@ export const shaderEffects: Record<ShaderEffect, ShaderEffectDef> = {
     `,
   },
 
-  [ShaderEffect.SINE_WAVE]: {
-    stage: "color",
+  [ShaderEffect.REALITY_GLITCH]: {
+    stage: "mapping",
     intensity: 1.0,
     glsl: `
-      float w = sin(uv.y*50.0 + u_time*5.0) * 0.1;
-      color.rg += w * u_intensity_SINE_WAVE;
+      {
+        // REALITY_GLITCH: The ultimate trippy effect with SMOOTH intensity transitions
+        float intensity = u_intensity_REALITY_GLITCH;
+        float time = u_time;
+        
+        // Multi-layer chaos noise function
+        vec2 chaos_uv = uv;
+        
+        // Layer 1: Fractal noise distortion - gets more chaotic with intensity
+        float noise_scale = 5.0 + intensity * 25.0;
+        float noise1 = fract(sin(dot(chaos_uv * noise_scale, vec2(12.9898, 78.233))) * 43758.5453);
+        float noise2 = fract(sin(dot(chaos_uv * noise_scale * 1.618, vec2(93.9898, 67.345))) * 24634.6345);
+        
+        // Layer 2: Time-evolving distortion waves - smooth frequency scaling
+        float wave_freq = 8.0 + intensity * 32.0;
+        float wave1 = sin(chaos_uv.x * wave_freq + time * 3.0 + noise1 * 6.28);
+        float wave2 = cos(chaos_uv.y * wave_freq + time * 2.7 + noise2 * 6.28);
+        float wave3 = sin((chaos_uv.x + chaos_uv.y) * wave_freq * 0.7 + time * 4.1);
+        
+        // Layer 3: Spiral chaos - smooth spiral arm scaling
+        vec2 center = vec2(0.5 + sin(time * 0.3) * 0.1, 0.5 + cos(time * 0.23) * 0.1);
+        vec2 spiral_coord = chaos_uv - center;
+        float spiral_r = length(spiral_coord);
+        float spiral_angle = atan(spiral_coord.y, spiral_coord.x);
+        float spiral_arms = 3.0 + intensity * 8.0;
+        float spiral_distort = sin(spiral_angle * spiral_arms + spiral_r * 20.0 + time * 5.0) * spiral_r;
+        
+        // Layer 4: Digital corruption patterns - SMOOTH corruption instead of hard steps
+        vec2 corrupt_uv = floor(chaos_uv * (20.0 + intensity * 80.0)) / (20.0 + intensity * 80.0);
+        float corrupt_hash = fract(sin(dot(corrupt_uv, vec2(127.1, 311.7))) * 43758.5453);
+        // Use smoothstep for gradual corruption instead of hard step
+        float corruption_threshold = 0.7 - intensity * 0.3;
+        float data_corruption = smoothstep(corruption_threshold - 0.1, corruption_threshold + 0.1, corrupt_hash);
+        
+        // Layer 5: Reality tearing - smooth quadratic scaling
+        float tear_intensity = intensity * intensity;
+        vec2 tear_offset = vec2(
+          sin(time * 6.0 + chaos_uv.y * 50.0) * tear_intensity * 0.3,
+          cos(time * 7.3 + chaos_uv.x * 47.0) * tear_intensity * 0.3
+        );
+        
+        // Combine all chaos layers with smooth scaling
+        vec2 total_distortion = vec2(
+          (wave1 + spiral_distort + tear_offset.x) * intensity * 0.08,
+          (wave2 + wave3 + tear_offset.y) * intensity * 0.08
+        );
+        
+        // Add SMOOTH corruption jumps - no more hard if statements
+        float jump_x = (noise1 - 0.5) * intensity * 0.4 * data_corruption;
+        float jump_y = (noise2 - 0.5) * intensity * 0.4 * data_corruption;
+        total_distortion += vec2(jump_x, jump_y);
+        
+        // Layer 6: Recursive feedback-like distortion - smooth scaling
+        vec2 feedback_uv = chaos_uv + total_distortion * 0.5;
+        float feedback_noise = fract(sin(dot(feedback_uv * 43.0, vec2(12.9898, 78.233))) * 43758.5453);
+        total_distortion += vec2(
+          sin(feedback_noise * 6.28 + time * 8.0) * intensity * 0.05,
+          cos(feedback_noise * 6.28 + time * 9.2) * intensity * 0.05
+        );
+        
+        // Layer 7: Chromatic separation zones - smooth zone scaling
+        float chroma_zone = floor(chaos_uv.x * (5.0 + intensity * 15.0)) + floor(chaos_uv.y * (5.0 + intensity * 15.0));
+        float chroma_phase = chroma_zone * 2.1 + time * 3.0;
+        vec2 chroma_distort = vec2(
+          sin(chroma_phase) * intensity * 0.03,
+          cos(chroma_phase * 1.3) * intensity * 0.03
+        );
+        
+        // Final UV with all distortions applied
+        vec2 final_distorted_uv = chaos_uv + total_distortion + chroma_distort;
+        
+        // SMOOTH transition between wrapped and unwrapped UV coordinates
+        // Instead of hard cut at 0.8, use smooth mix from 0.7 to 0.9 intensity
+        vec2 wrapped_uv = fract(final_distorted_uv);
+        vec2 unwrapped_uv = final_distorted_uv;
+        
+        // Smooth transition factor: 0.0 at intensity 0.7, 1.0 at intensity 0.9
+        float chaos_factor = smoothstep(0.7, 0.9, intensity);
+        uv = mix(wrapped_uv, unwrapped_uv, chaos_factor);
+      }
     `,
   },
 
@@ -252,8 +330,8 @@ export const clips: Clip[] = [
     id: "2",
     name: "Rhythmic Sine Wave",
     instructions: [
-      { effect: ShaderEffect.SINE_WAVE, startBeat: 1, lengthBeats: 4 },     // Beats 1-4
-      { effect: ShaderEffect.SINE_WAVE, startBeat: 7, lengthBeats: 0.5 },   // Beat 7 (short accent)
+      { effect: ShaderEffect.REALITY_GLITCH, startBeat: 1, lengthBeats: 4 },     // Beats 1-4
+      { effect: ShaderEffect.REALITY_GLITCH, startBeat: 7, lengthBeats: 0.5 },   // Beat 7 (short accent)
     ],
   },
   {

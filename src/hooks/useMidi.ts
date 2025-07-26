@@ -25,7 +25,7 @@ export const useMidi = (config: MidiConfig): MidiState => {
   const PADS = {
     // Top row (40-43, 48-51) - these effects will be controlled by knobs
     40: ShaderEffect.INVERT,
-    41: ShaderEffect.SINE_WAVE,
+    41: ShaderEffect.REALITY_GLITCH,
     42: ShaderEffect.DISPLACE,
     43: ShaderEffect.CHROMA,
     48: ShaderEffect.PIXELATE,
@@ -42,7 +42,7 @@ export const useMidi = (config: MidiConfig): MidiState => {
   // Direct mapping from CC numbers to effects
   const KNOB_CC_MAPPING = {
     21: ShaderEffect.INVERT,     // Knob 1
-    22: ShaderEffect.SINE_WAVE,  // Knob 2
+    22: ShaderEffect.REALITY_GLITCH,  // Knob 2
     23: ShaderEffect.DISPLACE,   // Knob 3
     24: ShaderEffect.CHROMA,     // Knob 4
     25: ShaderEffect.PIXELATE,   // Knob 5

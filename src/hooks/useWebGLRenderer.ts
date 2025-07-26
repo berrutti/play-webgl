@@ -6,7 +6,6 @@ import {
   createEffectShader,
   createVideoSamplingShader
 } from "../shaderBuilder";
-// import { logAspectRatioInfo, verifyNoWarping } from "../test-utils"; // Removed - testing complete
 
 export interface UseWebGLRendererProps {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
@@ -137,6 +136,14 @@ export function useWebGLRenderer({
     lastFrameTime: 0,
     lastPerformanceReport: 0,
   });
+  
+  // Cache for uniform values to avoid unnecessary GPU uploads
+  const uniformCacheRef = useRef<Record<string, {
+    time?: number;
+    bpm?: number;
+    intensities?: Record<string, number>;
+    lastProgramUsed?: WebGLProgram | null;
+  }>>({});
 
   // Initialize WebGL context and resources
   useEffect(() => {
@@ -410,14 +417,41 @@ export function useWebGLRenderer({
           gl.activeTexture(gl.TEXTURE0);
           gl.bindTexture(gl.TEXTURE_2D, currentTexture);
           gl.uniform1i(effectShader.uniformLocations.image, 0);
-          gl.uniform1f(effectShader.uniformLocations.time, now / 1000);
-          gl.uniform1f(effectShader.uniformLocations.bpm, bpm);
           
-          // Set intensity if effect supports it
+          // PERFORMANCE OPTIMIZATION: Smart uniform uploads
+          // Note: WebGL uniforms are lost when switching programs, so we track the last program used
+          const cache = uniformCacheRef.current[effect] || { lastProgramUsed: null };
+          const currentTime = now / 1000;
+          
+          // If this is the first time using this program this frame, upload all uniforms
+          const programSwitched = cache.lastProgramUsed !== effectShader.program;
+          
+          // Upload time uniform (always changes or on program switch)
+          if (cache.time !== currentTime || programSwitched) {
+            gl.uniform1f(effectShader.uniformLocations.time, currentTime);
+            cache.time = currentTime;
+          }
+          
+          // Upload BPM uniform (only if changed or on program switch)
+          if (cache.bpm !== bpm || programSwitched) {
+            gl.uniform1f(effectShader.uniformLocations.bpm, bpm);
+            cache.bpm = bpm;
+          }
+          
+          // Upload intensity uniform (only if changed or on program switch)
           const intensityLocation = effectShader.uniformLocations[`intensity_${effect}`];
           if (intensityLocation) {
-            gl.uniform1f(intensityLocation, effectIntensities[effect]);
+            const currentIntensity = effectIntensities[effect];
+            if (!cache.intensities) cache.intensities = {};
+            if (cache.intensities[effect] !== currentIntensity || programSwitched) {
+              gl.uniform1f(intensityLocation, currentIntensity);
+              cache.intensities[effect] = currentIntensity;
+            }
           }
+          
+          // Remember this program was used
+          cache.lastProgramUsed = effectShader.program;
+          uniformCacheRef.current[effect] = cache;
           
           gl.drawArrays(gl.TRIANGLES, 0, 6);
           
