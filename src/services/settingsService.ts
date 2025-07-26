@@ -31,7 +31,12 @@ export const settingsService = {
       if (isMuted) settings.isMuted = JSON.parse(isMuted);
 
       const inputSource = localStorage.getItem(STORAGE_KEYS.INPUT_SOURCE);
-      if (inputSource) settings.inputSource = inputSource;
+      if (inputSource) {
+        // Migrate old webcam default to new video default for better UX
+        settings.inputSource = inputSource === 'webcam' ? 'video' : inputSource;
+      } else {
+        settings.inputSource = 'video'; // Default to video playlist instead of webcam
+      }
 
       const activeEffects = localStorage.getItem(STORAGE_KEYS.ACTIVE_EFFECTS);
       if (activeEffects) settings.activeEffects = JSON.parse(activeEffects);

@@ -563,6 +563,9 @@ export function useWebGLRenderer({
     clipStartTimes,
     bpm,
     onClipFinished,
+    canvasRef,
+    onRenderPerformance,
+    videoRef,
   ]);
 
   return {

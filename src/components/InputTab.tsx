@@ -2,22 +2,48 @@ import React, { useState } from "react";
 
 interface InputTabProps {
   inputSource: string;
-  onInputSourceChange: (newSource: string) => void;
-  onFileSelected: (file: File) => void;
+  onInputSourceChange: (source: string) => void;
   isMuted: boolean;
   onMuteToggle: () => void;
-  showHelp: boolean;
-  onToggleHelp: () => void;
+  videoPlaylist: Array<{
+    id: string;
+    name: string;
+    url?: string;
+    file?: File;
+    isDefault?: boolean;
+  }>;
+  currentVideoIndex: number;
+  isVideoPlaying: boolean;
+  onVideoPlayPause: () => void;
+  onNextVideo: () => void;
+  onPreviousVideo: () => void;
+  onAddVideosToPlaylist: (files: File[]) => void;
+  onRemoveFromPlaylist: (videoId: string) => void;
+  onSeek: (time: number) => void;
+  onSeekStart: () => void;
+  onSeekEnd: () => void;
+  currentTime: number;
+  duration: number;
 }
 
 export const InputTab: React.FC<InputTabProps> = ({
   inputSource,
   onInputSourceChange,
-  onFileSelected,
   isMuted,
   onMuteToggle,
-  showHelp,
-  onToggleHelp,
+  videoPlaylist,
+  currentVideoIndex,
+  isVideoPlaying,
+  onVideoPlayPause,
+  onNextVideo,
+  onPreviousVideo,
+  onAddVideosToPlaylist,
+  onRemoveFromPlaylist,
+  onSeek,
+  onSeekStart,
+  onSeekEnd,
+  currentTime,
+  duration,
 }) => {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -35,34 +61,81 @@ export const InputTab: React.FC<InputTabProps> = ({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    
+
     const files = Array.from(e.dataTransfer.files);
-    const videoFile = files.find(file => file.type.startsWith('video/'));
-    
-    if (videoFile) {
-      handleVideoFile(videoFile);
+    const videoFiles = files.filter(file => file.type.startsWith('video/'));
+
+    if (videoFiles.length > 0) {
+      onAddVideosToPlaylist(videoFiles);
+      console.log(`Added ${videoFiles.length} video(s) to playlist`);
     }
   };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      const videoFile = files[0];
-      if (videoFile.type.startsWith('video/')) {
-        handleVideoFile(videoFile);
+      const videoFiles = Array.from(files).filter(file => file.type.startsWith('video/'));
+      if (videoFiles.length > 0) {
+        onAddVideosToPlaylist(videoFiles);
       }
     }
-  };
-
-  const handleVideoFile = (file: File) => {
-    onInputSourceChange('video');
-    onFileSelected(file);
-    console.log('Selected video file:', file.name, 'Size:', Math.round(file.size / 1024 / 1024), 'MB');
   };
 
   const handleDropZoneClick = () => {
     fileInputRef.current?.click();
   };
+
+  // Timeline seeking handlers
+  const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (duration > 0) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const percentage = Math.max(0, Math.min(1, clickX / rect.width));
+      const newTime = percentage * duration;
+      onSeek(newTime);
+    }
+  };
+
+  const handleTimelineMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    onSeekStart();
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = (e.target as HTMLElement).closest('.timeline-track')?.getBoundingClientRect();
+      if (rect && duration > 0) {
+        const clickX = e.clientX - rect.left;
+        const percentage = Math.max(0, Math.min(1, clickX / rect.width));
+        const newTime = percentage * duration;
+        onSeek(newTime);
+      }
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      onSeekEnd();
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleTimelineMouseUp = () => {
+    onSeekEnd();
+  };
+
+  // Format time helper
+  const formatTime = (seconds: number) => {
+    if (isNaN(seconds)) return "0:00";
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Calculate progress percentage for timeline display
+  const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  const currentVideo = videoPlaylist[currentVideoIndex];
 
   return (
     <div className="tab-content">
@@ -77,64 +150,157 @@ export const InputTab: React.FC<InputTabProps> = ({
           onChange={(e) => onInputSourceChange(e.target.value)}
         >
           <option value="webcam">Webcam</option>
-          <option value="video">Video File</option>
+          <option value="video">Video Playlist</option>
         </select>
       </div>
 
-      <div className="control-group">
-        <label className="control-label">Drop Video File:</label>
-        <div 
-          className={`drop-zone ${dragOver ? 'drag-over' : ''}`}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          onClick={handleDropZoneClick}
-        >
-          <div className="drop-zone-content">
-            <div className="drop-zone-icon">📁</div>
-            <div className="drop-zone-text">Drag & drop video files here</div>
-            <div className="drop-zone-subtext">or click to browse</div>
+      {inputSource === "video" && (
+        <div className="video-player-container">
+          {/* Current Video Info */}
+          {currentVideo && (
+            <div className="current-video-display">
+              <div className="video-title">{currentVideo.name}</div>
+              <div className="video-position">{currentVideoIndex + 1} of {videoPlaylist.length}</div>
+            </div>
+          )}
+
+          {/* Video Controls Bar */}
+          <div className="video-controls-bar">
+            <div className="transport-controls">
+              <button
+                className="control-btn"
+                onClick={onPreviousVideo}
+                disabled={videoPlaylist.length <= 1}
+                title="Previous video"
+              >
+                ⏮
+              </button>
+              <button
+                className="control-btn play-btn"
+                onClick={onVideoPlayPause}
+                disabled={videoPlaylist.length === 0}
+                title={isVideoPlaying ? 'Pause' : 'Play'}
+              >
+                {isVideoPlaying ? '⏸' : '▶'}
+              </button>
+              <button
+                className="control-btn"
+                onClick={onNextVideo}
+                disabled={videoPlaylist.length <= 1}
+                title="Next video"
+              >
+                ⏭
+              </button>
+            </div>
+
+
+            {/* Audio Controls */}
+            <div className="audio-controls">
+              <button
+                className={`control-btn ${isMuted ? 'muted' : ''}`}
+                onClick={onMuteToggle}
+                title={isMuted ? 'Unmute' : 'Mute'}
+              >
+                {isMuted ? 'MUTE' : 'VOL'}
+              </button>
+            </div>
           </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="video/*"
-            onChange={handleFileInput}
-            style={{ display: 'none' }}
-          />
-        </div>
-      </div>
 
-      <div className="control-group">
-        <label className="control-label">Playback Controls:</label>
-        <div className="playback-toolbar">
-          <button 
-            className={`mute-button ${isMuted ? 'muted' : ''}`}
-            onClick={onMuteToggle}
-            title={isMuted ? 'Unmute audio' : 'Mute audio'}
-          >
-            {isMuted ? '🔇' : '🔊'}
-          </button>
-          <span className="playback-status">
-            {isMuted ? 'Audio muted' : 'Audio enabled'}
-          </span>
-        </div>
-      </div>
+          {/* Timeline */}
+          <div className="timeline-container">
+            <span className="time-display">{formatTime(currentTime)}</span>
+            <div
+              className="timeline-track"
+              onMouseDown={handleTimelineMouseDown}
+              onMouseUp={handleTimelineMouseUp}
+              onClick={handleTimelineClick}
+            >
+              <div className="timeline-background"></div>
+              <div
+                className="timeline-progress"
+                style={{ width: `${progressPercentage}%` }}
+              ></div>
+              <div
+                className="timeline-handle"
+                style={{ left: `${progressPercentage}%` }}
+              ></div>
+            </div>
+            <span className="time-display">{formatTime(duration)}</span>
+          </div>
 
-      <div className="control-group">
-        <div className="checkbox-group">
-          <input
-            type="checkbox"
-            id="showHelp"
-            className="control-checkbox"
-            checked={showHelp}
-            onChange={onToggleHelp}
-          />
-          <label htmlFor="showHelp" className="checkbox-label">
-            Show help overlay
-          </label>
+          {/* Playlist */}
+          <div className="playlist-section">
+            <div className="playlist-header">
+              <span>Playlist ({videoPlaylist.length})</span>
+              <div
+                className={`add-videos-zone ${dragOver ? 'drag-over' : ''}`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={handleDropZoneClick}
+              >
+                <span>+ Add Videos</span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="video/*"
+                  multiple
+                  onChange={handleFileInput}
+                  style={{ display: 'none' }}
+                />
+              </div>
+            </div>
+
+            <div className="playlist-items">
+              {videoPlaylist.map((video, index) => (
+                <div
+                  key={video.id}
+                  className={`playlist-row ${index === currentVideoIndex ? 'current' : ''}`}
+                >
+                  <div className="playlist-number">{index + 1}</div>
+                  <div className="playlist-info">
+                    <div className="playlist-name">{video.name}</div>
+                    {index === currentVideoIndex && (
+                      <div className="playlist-status">
+                        {isVideoPlaying ? 'Playing' : 'Paused'}
+                      </div>
+                    )}
+                  </div>
+                  {!video.isDefault && (
+                    <button
+                      className="remove-btn"
+                      onClick={() => onRemoveFromPlaylist(video.id)}
+                      title="Remove from playlist"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+              {videoPlaylist.length === 0 && (
+                <div className="playlist-empty">
+                  No videos in playlist
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {inputSource === "webcam" && (
+        <div className="webcam-controls">
+          <div className="control-group">
+            <label className="control-label">Webcam Audio:</label>
+            <button
+              className={`control-btn ${isMuted ? 'muted' : ''}`}
+              onClick={onMuteToggle}
+              title={isMuted ? 'Unmute' : 'Mute'}
+            >
+              {isMuted ? 'MUTED' : 'ENABLED'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }; 

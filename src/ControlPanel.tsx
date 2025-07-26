@@ -24,6 +24,28 @@ interface ControlPanelProps {
   onToggleHelp: () => void;
   playingClips: Record<string, boolean>;
   showHelp: boolean;
+  // New playlist props
+  videoPlaylist: Array<{
+    id: string;
+    name: string;
+    url?: string;
+    file?: File;
+    isDefault?: boolean;
+  }>;
+  currentVideoIndex: number;
+  isVideoPlaying: boolean;
+  onVideoPlayPause: () => void;
+  onNextVideo: () => void;
+  onPreviousVideo: () => void;
+  onAddVideosToPlaylist: (files: File[]) => void;
+  onRemoveFromPlaylist: (videoId: string) => void;
+  // Timeline props
+  onSeek: (time: number) => void;
+  onSeekStart: () => void;
+  onSeekEnd: () => void;
+  currentTime: number;
+  duration: number;
+  isSeeking: boolean;
 }
 
 type TabType = 'input' | 'clips' | 'effects';
@@ -49,6 +71,20 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onToggleHelp,
   playingClips,
   showHelp,
+  videoPlaylist,
+  currentVideoIndex,
+  isVideoPlaying,
+  onVideoPlayPause,
+  onNextVideo,
+  onPreviousVideo,
+  onAddVideosToPlaylist,
+  onRemoveFromPlaylist,
+  onSeek,
+  onSeekStart,
+  onSeekEnd,
+  currentTime,
+  duration,
+  isSeeking,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('input');
 
@@ -84,6 +120,20 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           onMuteToggle={onMuteToggle}
           showHelp={showHelp}
           onToggleHelp={onToggleHelp}
+          videoPlaylist={videoPlaylist}
+          currentVideoIndex={currentVideoIndex}
+          isVideoPlaying={isVideoPlaying}
+          onVideoPlayPause={onVideoPlayPause}
+          onNextVideo={onNextVideo}
+          onPreviousVideo={onPreviousVideo}
+          onAddVideosToPlaylist={onAddVideosToPlaylist}
+          onRemoveFromPlaylist={onRemoveFromPlaylist}
+          onSeek={onSeek}
+          onSeekStart={onSeekStart}
+          onSeekEnd={onSeekEnd}
+          currentTime={currentTime}
+          duration={duration}
+          isSeeking={isSeeking}
         />
       )}
 

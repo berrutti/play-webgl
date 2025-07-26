@@ -13,6 +13,36 @@ export interface MidiState {
   deviceName: string;
 }
 
+// Launchkey Mini MK3 pad mapping - DRUM MODE
+const PADS = {
+  // Top row (40-43, 48-51) - these effects will be controlled by knobs
+  40: ShaderEffect.INVERT,
+  41: ShaderEffect.REALITY_GLITCH,
+  42: ShaderEffect.DISPLACE,
+  43: ShaderEffect.CHROMA,
+  48: ShaderEffect.PIXELATE,
+  49: ShaderEffect.VORONOI,
+  50: ShaderEffect.RIPPLE,
+  51: null, // Reserved for future effect with intensity
+  // Bottom row (36-39, 44-47) - toggle only, no knob control
+  36: ShaderEffect.GRAYSCALE,
+  37: ShaderEffect.KALEIDOSCOPE,
+  38: ShaderEffect.SWIRL,
+  // Remove: 47: 'BPM_TAP', - just leave unmapped
+};
+
+// Direct mapping from CC numbers to effects
+const KNOB_CC_MAPPING = {
+  21: ShaderEffect.INVERT,     // Knob 1
+  22: ShaderEffect.REALITY_GLITCH,  // Knob 2
+  23: ShaderEffect.DISPLACE,   // Knob 3
+  24: ShaderEffect.CHROMA,     // Knob 4
+  25: ShaderEffect.PIXELATE,   // Knob 5
+  26: ShaderEffect.VORONOI,    // Knob 6
+  27: ShaderEffect.RIPPLE,     // Knob 7
+  28: null,                    // Knob 8 - Reserved for future effect
+};
+
 export const useMidi = (config: MidiConfig): MidiState => {
   const [connected, setConnected] = useState(false);
   const [deviceName, setDeviceName] = useState('');
@@ -20,36 +50,6 @@ export const useMidi = (config: MidiConfig): MidiState => {
   const inputRef = useRef<Input | null>(null);
   const outputRef = useRef<Output | null>(null);
   const lastCCValuesRef = useRef<Record<number, number>>({});
-
-  // Launchkey Mini MK3 pad mapping - DRUM MODE
-  const PADS = {
-    // Top row (40-43, 48-51) - these effects will be controlled by knobs
-    40: ShaderEffect.INVERT,
-    41: ShaderEffect.REALITY_GLITCH,
-    42: ShaderEffect.DISPLACE,
-    43: ShaderEffect.CHROMA,
-    48: ShaderEffect.PIXELATE,
-    49: ShaderEffect.VORONOI,
-    50: ShaderEffect.RIPPLE,
-    51: null, // Reserved for future effect with intensity
-    // Bottom row (36-39, 44-47) - toggle only, no knob control
-    36: ShaderEffect.GRAYSCALE,
-    37: ShaderEffect.KALEIDOSCOPE,
-    38: ShaderEffect.SWIRL,
-    // Remove: 47: 'BPM_TAP', - just leave unmapped
-  };
-
-  // Direct mapping from CC numbers to effects
-  const KNOB_CC_MAPPING = {
-    21: ShaderEffect.INVERT,     // Knob 1
-    22: ShaderEffect.REALITY_GLITCH,  // Knob 2
-    23: ShaderEffect.DISPLACE,   // Knob 3
-    24: ShaderEffect.CHROMA,     // Knob 4
-    25: ShaderEffect.PIXELATE,   // Knob 5
-    26: ShaderEffect.VORONOI,    // Knob 6
-    27: ShaderEffect.RIPPLE,     // Knob 7
-    28: null,                    // Knob 8 - Reserved for future effect
-  };
 
   const setupEventListeners = useCallback(() => {
     if (!inputRef.current) return;
@@ -140,10 +140,10 @@ export const useMidi = (config: MidiConfig): MidiState => {
         config.onMidiConnect();
       }
 
-    } catch (error) {
+    } catch {
       setConnected(false);
     }
-  }, [setupEventListeners]);
+  }, [setupEventListeners, config]);
 
   const disconnect = useCallback(() => {
     if (inputRef.current) {

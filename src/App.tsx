@@ -159,9 +159,33 @@ const App = () => {
   ) as Record<ShaderEffect, number>;
 
   const [showPanel, setShowPanel] = useState(false);
-  const [inputSource, setInputSource] = useState("webcam");
-  const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
+  const [inputSource, setInputSource] = useState("video"); // Changed default to video with black screen
   const [currentBlobUrl, setCurrentBlobUrl] = useState<string | null>(null);
+  
+  // Video playlist system
+  const [videoPlaylist, setVideoPlaylist] = useState<Array<{
+    id: string;
+    name: string;
+    url?: string;
+    file?: File;
+    isDefault?: boolean;
+  }>>([
+    {
+      id: 'big-buck-bunny',
+      name: 'Big Buck Bunny',
+      url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+      isDefault: true
+    }
+  ]);
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [videoPausedManually, setVideoPausedManually] = useState(false);
+  
+  // Video timeline state
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isSeeking, setIsSeeking] = useState(false);
+
   const [playingClips, setPlayingClips] = useState<Record<string, boolean>>(
     () =>
       clips.reduce((acc, clip) => {
@@ -308,6 +332,10 @@ const App = () => {
 
     if (inputSource === "webcam") {
       videoElement.src = "";
+      // Stop any playing video first
+      videoElement.pause();
+      setIsVideoPlaying(false);
+      
       navigator.mediaDevices
         .getUserMedia({ video: true })
         .then((stream) => {
@@ -316,35 +344,38 @@ const App = () => {
         })
         .catch(console.error);
     } else if (inputSource === "video") {
-      videoElement.pause();
-
-      if (selectedVideoFile) {
-        // Use the user-selected video file
-        const fileUrl = URL.createObjectURL(selectedVideoFile);
-        setCurrentBlobUrl(fileUrl);
-        videoElement.src = fileUrl;
-      } else {
-        // Fallback to Big Buck Bunny if no file is selected
-        videoElement.src =
-          "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+      // Only pause if we were previously on webcam or if there's no current video
+      const wasOnWebcam = videoElement.srcObject !== null;
+      if (wasOnWebcam) {
+        videoElement.pause();
+        setIsVideoPlaying(false);
       }
 
-      videoElement.loop = true;
-      videoElement.load();
+      // Load current video from playlist but don't auto-play unless switching from webcam
+      const currentVideo = videoPlaylist[currentVideoIndex];
+      if (currentVideo) {
+        // Only change source if it's different from current
+        let newSrc = "";
+        if (currentVideo.file) {
+          const fileUrl = URL.createObjectURL(currentVideo.file);
+          setCurrentBlobUrl(fileUrl);
+          newSrc = fileUrl;
+        } else if (currentVideo.url) {
+          newSrc = currentVideo.url;
+        }
 
-      // Add a small delay before playing to ensure the video is loaded
-      setTimeout(() => {
-        videoElement
-          .play()
-          .catch((err) => {
-            // Only log error if it's not an abort error (which is normal when switching videos)
-            if (err.name !== 'AbortError') {
-              console.error("Error playing video:", err);
-            }
-          });
-      }, 100);
+        // Only reload if source is actually changing
+        if (videoElement.src !== newSrc) {
+          videoElement.src = newSrc;
+          videoElement.loop = false;
+          videoElement.load();
+        }
+      } else {
+        // No videos in playlist - clear source for black screen
+        videoElement.src = "";
+      }
     }
-  }, [inputSource, selectedVideoFile]);
+  }, [inputSource, currentVideoIndex, videoPlaylist, currentBlobUrl]);
 
   // Cleanup blob URL on component unmount
   useEffect(() => {
@@ -435,7 +466,7 @@ const App = () => {
     });
   }, [activeEffects]);
 
-  const handlePlayToggle = (clipId: string) => {
+  const handlePlayToggle = useCallback((clipId: string) => {
     setPlayingClips((prev) => {
       const now = performance.now() / 1000;
       const isNowPlaying = !prev[clipId];
@@ -444,23 +475,167 @@ const App = () => {
       }
       return { ...prev, [clipId]: isNowPlaying };
     });
-  };
+  }, []);
 
-  const handleLoopToggle = (clipId: string) => {
+  const handleLoopToggle = useCallback((clipId: string) => {
     setLoopClips((prev) => ({ ...prev, [clipId]: !prev[clipId] }));
-  };
+  }, []);
 
-  const handleInputSourceChange = (newSource: string) => {
+  const handleInputSourceChange = useCallback((newSource: string) => {
     setInputSource(newSource);
-  };
+  }, []);
 
-  const handleFileSelected = (file: File) => {
-    setSelectedVideoFile(file);
-  };
+  // New playlist management functions
+  const handleVideoPlayPause = useCallback(() => {
+    const videoElement = videoRef.current;
+    if (!videoElement || inputSource !== "video") return;
 
-  const handleMuteToggle = () => {
+    if (isVideoPlaying) {
+      videoElement.pause();
+      setIsVideoPlaying(false);
+      setVideoPausedManually(true);
+    } else {
+      videoElement.play().then(() => {
+        setIsVideoPlaying(true);
+        setVideoPausedManually(false);
+      }).catch((err) => {
+        if (err.name !== 'AbortError') {
+          console.error("Error playing video:", err);
+        }
+      });
+    }
+  }, [isVideoPlaying, inputSource]);
+
+  const handleNextVideo = useCallback(() => {
+    if (videoPlaylist.length <= 1) return;
+    const nextIndex = (currentVideoIndex + 1) % videoPlaylist.length;
+    const wasPlaying = isVideoPlaying;
+    setCurrentVideoIndex(nextIndex);
+    // Don't reset playback state - keep playing if it was playing
+    if (wasPlaying) {
+      // Small delay to let video load, then resume playback
+      setTimeout(() => {
+        const videoElement = videoRef.current;
+        if (videoElement) {
+          videoElement.play().then(() => {
+            setIsVideoPlaying(true);
+          }).catch(console.error);
+        }
+      }, 100);
+    }
+  }, [currentVideoIndex, videoPlaylist.length, isVideoPlaying]);
+
+  const handlePreviousVideo = useCallback(() => {
+    if (videoPlaylist.length <= 1) return;
+    const prevIndex = currentVideoIndex === 0 ? videoPlaylist.length - 1 : currentVideoIndex - 1;
+    const wasPlaying = isVideoPlaying;
+    setCurrentVideoIndex(prevIndex);
+    // Don't reset playback state - keep playing if it was playing
+    if (wasPlaying) {
+      // Small delay to let video load, then resume playback
+      setTimeout(() => {
+        const videoElement = videoRef.current;
+        if (videoElement) {
+          videoElement.play().then(() => {
+            setIsVideoPlaying(true);
+          }).catch(console.error);
+        }
+      }, 100);
+    }
+  }, [currentVideoIndex, videoPlaylist.length, isVideoPlaying]);
+
+  const handleAddVideosToPlaylist = useCallback((files: File[]) => {
+    const videoFiles = files.filter(file => file.type.startsWith('video/'));
+    const newVideos = videoFiles.map(file => ({
+      id: `video-${Date.now()}-${Math.random()}`,
+      name: file.name,
+      file
+    }));
+    
+    setVideoPlaylist(prev => [...prev, ...newVideos]);
+    
+    // Switch to first added video only if playlist was empty AND nothing is currently playing
+    if (videoPlaylist.length === 0 && newVideos.length > 0 && !isVideoPlaying) {
+      setCurrentVideoIndex(0);
+    }
+    
+    // Only switch to video input source if we're not already in video mode
+    if (newVideos.length > 0 && inputSource !== "video") {
+      setInputSource("video");
+    }
+  }, [videoPlaylist.length, isVideoPlaying, inputSource]);
+
+  const handleRemoveFromPlaylist = useCallback((videoId: string) => {
+    setVideoPlaylist(prev => {
+      const newPlaylist = prev.filter(video => video.id !== videoId);
+      // Adjust current index if needed
+      if (currentVideoIndex >= newPlaylist.length) {
+        setCurrentVideoIndex(Math.max(0, newPlaylist.length - 1));
+      }
+      return newPlaylist;
+    });
+  }, [currentVideoIndex]);
+
+  // Handle video ended event to go to next video
+  useEffect(() => {
+    const videoElement = videoRef.current;
+    if (!videoElement) return;
+
+    const handleVideoEnded = () => {
+      if (inputSource === "video" && !videoPausedManually) {
+        // Auto-advance to next video
+        handleNextVideo();
+      }
+    };
+
+    const handleTimeUpdate = () => {
+      if (!isSeeking) {
+        setCurrentTime(videoElement.currentTime);
+      }
+    };
+
+    const handleLoadedMetadata = () => {
+      setDuration(videoElement.duration);
+      setCurrentTime(0);
+    };
+
+    const handleDurationChange = () => {
+      setDuration(videoElement.duration);
+    };
+
+    videoElement.addEventListener('ended', handleVideoEnded);
+    videoElement.addEventListener('timeupdate', handleTimeUpdate);
+    videoElement.addEventListener('loadedmetadata', handleLoadedMetadata);
+    videoElement.addEventListener('durationchange', handleDurationChange);
+
+    return () => {
+      videoElement.removeEventListener('ended', handleVideoEnded);
+      videoElement.removeEventListener('timeupdate', handleTimeUpdate);
+      videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      videoElement.removeEventListener('durationchange', handleDurationChange);
+    };
+  }, [inputSource, videoPausedManually, handleNextVideo, isSeeking]);
+
+  // Timeline seeking handlers
+  const handleSeek = useCallback((time: number) => {
+    const videoElement = videoRef.current;
+    if (videoElement && inputSource === "video") {
+      videoElement.currentTime = time;
+      setCurrentTime(time);
+    }
+  }, [inputSource]);
+
+  const handleSeekStart = useCallback(() => {
+    setIsSeeking(true);
+  }, []);
+
+  const handleSeekEnd = useCallback(() => {
+    setIsSeeking(false);
+  }, []);
+
+  const handleMuteToggle = useCallback(() => {
     setIsMuted((prev) => !prev);
-  };
+  }, []);
 
   // MIDI hook configuration
   const midiConfig: MidiConfig = useMemo(() => ({
@@ -522,7 +697,7 @@ const App = () => {
             style.textContent = cssText;
             popup.document.head.appendChild(style);
           }
-        } catch (e) {
+        } catch {
           // Some stylesheets might not be accessible due to CORS - ignore silently
         }
       });
@@ -571,7 +746,7 @@ const App = () => {
         midiDeviceName={midi.deviceName}
         isPopupMode={true}
         onInputSourceChange={handleInputSourceChange}
-        onFileSelected={handleFileSelected}
+        onFileSelected={() => {}} // This function is no longer used
         onIntensityChange={handleIntensityChange}
         onLoopToggle={handleLoopToggle}
         onMuteToggle={handleMuteToggle}
@@ -580,6 +755,20 @@ const App = () => {
         onToggleHelp={() => setShowHelp(!showHelp)}
         playingClips={playingClips}
         showHelp={showHelp}
+        videoPlaylist={videoPlaylist}
+        currentVideoIndex={currentVideoIndex}
+        isVideoPlaying={isVideoPlaying}
+        onVideoPlayPause={handleVideoPlayPause}
+        onNextVideo={handleNextVideo}
+        onPreviousVideo={handlePreviousVideo}
+        onAddVideosToPlaylist={handleAddVideosToPlaylist}
+        onRemoveFromPlaylist={handleRemoveFromPlaylist}
+        onSeek={handleSeek}
+        onSeekStart={handleSeekStart}
+        onSeekEnd={handleSeekEnd}
+        currentTime={currentTime}
+        duration={duration}
+        isSeeking={isSeeking}
       />,
       popupContainer
     );
@@ -597,12 +786,25 @@ const App = () => {
     playingClips,
     showHelp,
     handleInputSourceChange,
-    handleFileSelected,
     handleIntensityChange,
     handleLoopToggle,
     handleMuteToggle,
     handlePlayToggle,
     handleCheckboxChange,
+    videoPlaylist,
+    currentVideoIndex,
+    isVideoPlaying,
+    handleVideoPlayPause,
+    handleNextVideo,
+    handlePreviousVideo,
+    handleAddVideosToPlaylist,
+    handleRemoveFromPlaylist,
+    handleSeek,
+    handleSeekStart,
+    handleSeekEnd,
+    currentTime,
+    duration,
+    isSeeking,
   ]);
 
   return (
@@ -645,7 +847,7 @@ const App = () => {
             midiConnected={midi.connected}
             midiDeviceName={midi.deviceName}
             onInputSourceChange={handleInputSourceChange}
-            onFileSelected={handleFileSelected}
+            onFileSelected={() => {}} // This function is no longer used
             onIntensityChange={handleIntensityChange}
             onLoopToggle={handleLoopToggle}
             onMuteToggle={handleMuteToggle}
@@ -654,6 +856,20 @@ const App = () => {
             onToggleHelp={() => setShowHelp((prev) => !prev)}
             playingClips={playingClips}
             showHelp={showHelp}
+            videoPlaylist={videoPlaylist}
+            currentVideoIndex={currentVideoIndex}
+            isVideoPlaying={isVideoPlaying}
+            onVideoPlayPause={handleVideoPlayPause}
+            onNextVideo={handleNextVideo}
+            onPreviousVideo={handlePreviousVideo}
+            onAddVideosToPlaylist={handleAddVideosToPlaylist}
+            onRemoveFromPlaylist={handleRemoveFromPlaylist}
+            onSeek={handleSeek}
+            onSeekStart={handleSeekStart}
+            onSeekEnd={handleSeekEnd}
+            currentTime={currentTime}
+            duration={duration}
+            isSeeking={isSeeking}
           />
         </div>
       )}
