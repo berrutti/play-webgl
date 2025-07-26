@@ -135,14 +135,14 @@ const App = () => {
   const [effectTransitions, setEffectTransitions] = useState<EffectTransitions>(createInitialTransitions);
 
   // Computed rendering state based on transitions
-  const renderingEffects = Object.fromEntries(
+  const renderingEffects = useMemo(() => Object.fromEntries(
     Object.values(ShaderEffect).map(effect => [
       effect,
       effectTransitions[effect].isActive
     ])
-  ) as Record<ShaderEffect, boolean>;
+  ) as Record<ShaderEffect, boolean>, [effectTransitions]);
 
-  const renderingIntensities = Object.fromEntries(
+  const renderingIntensities = useMemo(() => Object.fromEntries(
     Object.values(ShaderEffect).map(effect => {
       const transition = effectTransitions[effect];
       const effectDef = shaderEffects[effect];
@@ -156,7 +156,7 @@ const App = () => {
 
       return [effect, transition.currentIntensity * userIntensity];
     })
-  ) as Record<ShaderEffect, number>;
+  ) as Record<ShaderEffect, number>, [effectTransitions, effectIntensities]);
 
   const [showPanel, setShowPanel] = useState(false);
   const [inputSource, setInputSource] = useState("video"); // Changed default to video with black screen
@@ -375,9 +375,9 @@ const App = () => {
         videoElement.src = "";
       }
     }
-  }, [inputSource, currentVideoIndex, videoPlaylist, currentBlobUrl]);
+  }, [inputSource, currentVideoIndex, videoPlaylist]);
 
-  // Cleanup blob URL on component unmount
+  // Cleanup blob URL on component unmount or when currentBlobUrl changes
   useEffect(() => {
     return () => {
       if (currentBlobUrl) {
