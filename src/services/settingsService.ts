@@ -1,12 +1,12 @@
 import { ShaderEffect } from "../utils";
 
 const STORAGE_KEYS = {
-  SHOW_HELP: 'trippy-vids-showHelp',
-  MUTED: 'trippy-vids-muted',
-  INPUT_SOURCE: 'trippy-vids-inputSource',
-  ACTIVE_EFFECTS: 'trippy-vids-activeEffects',
-  LOOP_CLIPS: 'trippy-vids-loopClips',
-  BPM: 'trippy-vids-bpm',
+  SHOW_HELP: 'play-webgl-showHelp',
+  MUTED: 'play-webgl-muted',
+  INPUT_SOURCE: 'play-webgl-inputSource',
+  ACTIVE_EFFECTS: 'play-webgl-activeEffects',
+  LOOP_CLIPS: 'play-webgl-loopClips',
+  BPM: 'play-webgl-bpm',
 } as const;
 
 export interface AppSettings {
@@ -32,10 +32,9 @@ export const settingsService = {
 
       const inputSource = localStorage.getItem(STORAGE_KEYS.INPUT_SOURCE);
       if (inputSource) {
-        // Migrate old webcam default to new video default for better UX
-        settings.inputSource = inputSource === 'webcam' ? 'video' : inputSource;
+        settings.inputSource = inputSource;
       } else {
-        settings.inputSource = 'video'; // Default to video playlist instead of webcam
+        settings.inputSource = 'webcam'; // Default to webcam for immediate feedback
       }
 
       const activeEffects = localStorage.getItem(STORAGE_KEYS.ACTIVE_EFFECTS);

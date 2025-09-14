@@ -62,7 +62,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   midiDeviceName,
   isPopupMode = false,
   onInputSourceChange,
-  onFileSelected,
   onIntensityChange,
   onLoopToggle,
   onMuteToggle,
@@ -84,7 +83,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onSeekEnd,
   currentTime,
   duration,
-  isSeeking,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('input');
 
@@ -115,11 +113,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         <InputTab
           inputSource={inputSource}
           onInputSourceChange={onInputSourceChange}
-          onFileSelected={onFileSelected}
           isMuted={isMuted}
           onMuteToggle={onMuteToggle}
-          showHelp={showHelp}
-          onToggleHelp={onToggleHelp}
           videoPlaylist={videoPlaylist}
           currentVideoIndex={currentVideoIndex}
           isVideoPlaying={isVideoPlaying}
@@ -133,7 +128,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           onSeekEnd={onSeekEnd}
           currentTime={currentTime}
           duration={duration}
-          isSeeking={isSeeking}
         />
       )}
 

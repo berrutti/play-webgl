@@ -159,7 +159,7 @@ const App = () => {
   ) as Record<ShaderEffect, number>, [effectTransitions, effectIntensities]);
 
   const [showPanel, setShowPanel] = useState(false);
-  const [inputSource, setInputSource] = useState("video"); // Changed default to video with black screen
+  const [inputSource, setInputSource] = useState("webcam");
   const [currentBlobUrl, setCurrentBlobUrl] = useState<string | null>(null);
   
   // Video playlist system
@@ -678,7 +678,7 @@ const App = () => {
       setIsPopupOpen(true);
 
       // Setup popup window
-      popup.document.title = 'Trippy Vids Controls';
+      popup.document.title = 'Play WebGL Controls';
 
       // Copy all CSS from parent window to popup
       const styles = Array.from(document.styleSheets);

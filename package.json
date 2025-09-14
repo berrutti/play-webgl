@@ -1,5 +1,5 @@
 {
-  "name": "trippy-vids",
+  "name": "play-webgl",
   "private": true,
   "version": "1.0.2",
   "type": "module",
@@ -8,7 +8,7 @@
     "email": "berrutit@gmail.com",
     "url": "https://github.com/berrutti"
   },
-  "homepage": "https://berrutti.github.io/trippy-vids",
+  "homepage": "https://berrutti.github.io/play-webgl",
   "scripts": {
     "build": "tsc -b && vite build",
     "deploy": "npm version patch && npm run build && gh-pages -d dist",
