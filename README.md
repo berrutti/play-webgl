@@ -1,4 +1,4 @@
-# play.webl
+# play-webl
 
 A WebGL webapp to process live video or VODs with shaders and clips:
 
