@@ -15,7 +15,6 @@ interface ControlPanelProps {
   midiDeviceName: string;
   isPopupMode?: boolean;
   onInputSourceChange: (newSource: string) => void;
-  onFileSelected: (file: File) => void;
   onIntensityChange: (effect: ShaderEffect, intensity: number) => void;
   onLoopToggle: (clipId: string) => void;
   onMuteToggle: () => void;
@@ -24,7 +23,6 @@ interface ControlPanelProps {
   onToggleHelp: () => void;
   playingClips: Record<string, boolean>;
   showHelp: boolean;
-  // New playlist props
   videoPlaylist: Array<{
     id: string;
     name: string;
@@ -32,14 +30,15 @@ interface ControlPanelProps {
     file?: File;
     isDefault?: boolean;
   }>;
-  currentVideoIndex: number;
+  selectedVideoIndex: number;
+  loadedVideoIndex: number;
   isVideoPlaying: boolean;
+  onVideoSelect: (index: number) => void;
   onVideoPlayPause: () => void;
   onNextVideo: () => void;
   onPreviousVideo: () => void;
   onAddVideosToPlaylist: (files: File[]) => void;
   onRemoveFromPlaylist: (videoId: string) => void;
-  // Timeline props
   onSeek: (time: number) => void;
   onSeekStart: () => void;
   onSeekEnd: () => void;
@@ -71,8 +70,10 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   playingClips,
   showHelp,
   videoPlaylist,
-  currentVideoIndex,
+  selectedVideoIndex,
+  loadedVideoIndex,
   isVideoPlaying,
+  onVideoSelect,
   onVideoPlayPause,
   onNextVideo,
   onPreviousVideo,
@@ -116,8 +117,10 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           isMuted={isMuted}
           onMuteToggle={onMuteToggle}
           videoPlaylist={videoPlaylist}
-          currentVideoIndex={currentVideoIndex}
+          selectedVideoIndex={selectedVideoIndex}
+          loadedVideoIndex={loadedVideoIndex}
           isVideoPlaying={isVideoPlaying}
+          onVideoSelect={onVideoSelect}
           onVideoPlayPause={onVideoPlayPause}
           onNextVideo={onNextVideo}
           onPreviousVideo={onPreviousVideo}

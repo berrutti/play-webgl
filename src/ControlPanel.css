@@ -868,9 +868,19 @@
   background: #2a2a2a;
 }
 
-.playlist-row.current {
+.playlist-row.selected {
+  background: #1a2a3a;
+  border-left: 4px solid #3a7aaa;
+}
+
+.playlist-row.playing {
   background: #1a3a1a;
   border-left: 4px solid #0a8a0a;
+}
+
+.playlist-row.selected.playing {
+  background: #1a3a2a;
+  border-left: 4px solid #0acc0a;
 }
 
 .playlist-number {
@@ -882,8 +892,18 @@
   margin-right: 12px;
 }
 
-.playlist-row.current .playlist-number {
+.playlist-row.selected .playlist-number {
+  color: #3a7aaa;
+  font-weight: bold;
+}
+
+.playlist-row.playing .playlist-number {
   color: #0a8a0a;
+  font-weight: bold;
+}
+
+.playlist-row.selected.playing .playlist-number {
+  color: #0acc0a;
   font-weight: bold;
 }
 

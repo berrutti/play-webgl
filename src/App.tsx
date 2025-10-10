@@ -1,4 +1,10 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+} from "react";
 import { createPortal } from "react-dom";
 import { clips, ShaderEffect, shaderEffects } from "./utils";
 import { useWebGLRenderer } from "./hooks/useWebGLRenderer";
@@ -7,7 +13,7 @@ import {
   startTransition,
   updateTransitions,
   hasActiveTransitions,
-  type EffectTransitions
+  type EffectTransitions,
 } from "./transitions";
 import { settingsService } from "./services/settingsService";
 import { useMidi, type MidiConfig } from "./hooks/useMidi";
@@ -15,6 +21,15 @@ import ControlPanel from "./ControlPanel";
 import packageJson from "../package.json";
 
 const VERSION = packageJson.version;
+
+const DEBOUNCE_DELAY_MS = 50;
+const VIDEO_LOAD_DELAY_MS = 100;
+const MIDI_NOTIFICATION_DURATION_MS = 5000;
+const BPM_TAP_WINDOW_MS = 10000;
+const BPM_TAP_MAX_COUNT = 8;
+const BPM_MIN = 60;
+const BPM_MAX = 200;
+const BPM_ROUNDING = 5;
 
 const clipKeyBindings: Record<string, string> = {
   q: clips[0].id,
@@ -27,50 +42,41 @@ const App = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // BPM tapping state
-  const [bpm, setBpm] = useState<number>(120); // Default BPM
+  const [bpm, setBpm] = useState<number>(120);
   const [isSettingBpm, setIsSettingBpm] = useState<boolean>(false);
   const tapTimesRef = useRef<number[]>([]);
 
-  // BPM calculation helpers
   const calculateBpmFromTaps = useCallback((times: number[]): number => {
     if (times.length < 2) return 120;
 
-    // Calculate intervals between taps
     const intervals = [];
     for (let i = 1; i < times.length; i++) {
       intervals.push(times[i] - times[i - 1]);
     }
 
-    // Average the intervals
-    const avgInterval = intervals.reduce((sum, interval) => sum + interval, 0) / intervals.length;
-
-    // Convert to BPM (60000ms = 1 minute)
+    const avgInterval =
+      intervals.reduce((sum, interval) => sum + interval, 0) / intervals.length;
     const rawBpm = 60000 / avgInterval;
 
-    // Round to nearest 5 for more musical BPMs
-    return Math.max(60, Math.min(200, Math.round(rawBpm / 5) * 5));
+    return Math.max(BPM_MIN, Math.min(BPM_MAX, Math.round(rawBpm / BPM_ROUNDING) * BPM_ROUNDING));
   }, []);
 
   const handleBpmTap = useCallback(() => {
     const now = performance.now();
 
-    // Add current tap and keep only recent taps
     const newTimes = [...tapTimesRef.current, now];
-    const cutoffTime = now - 10000;
-    const recentTimes = newTimes.filter(time => time > cutoffTime).slice(-8);
+    const cutoffTime = now - BPM_TAP_WINDOW_MS;
+    const recentTimes = newTimes.filter((time) => time > cutoffTime).slice(-BPM_TAP_MAX_COUNT);
 
     tapTimesRef.current = recentTimes;
 
-    // Calculate BPM if we have at least 2 taps
     if (recentTimes.length >= 2) {
       const newBpm = calculateBpmFromTaps(recentTimes);
       setBpm(newBpm);
       setIsSettingBpm(true);
 
-      // Auto-complete BPM setting after 2 beat intervals of inactivity
       const expectedInterval = 60000 / newBpm;
-      const timeoutDuration = expectedInterval * 2 + 500; // 2 beats + 500ms buffer
+      const timeoutDuration = expectedInterval * 2 + 500;
 
       setTimeout(() => {
         setIsSettingBpm(false);
@@ -79,19 +85,16 @@ const App = () => {
     }
   }, [calculateBpmFromTaps]);
 
-  // Key binding handler
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.repeat) return;
 
-      // Handle spacebar for BPM tapping
-      if (event.code === 'Space') {
+      if (event.code === "Space") {
         event.preventDefault();
         handleBpmTap();
         return;
       }
 
-      // Handle clip key bindings
       const clipId = clipKeyBindings[event.key];
       if (!clipId) return;
 
@@ -109,7 +112,6 @@ const App = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleBpmTap]);
 
-  // State management with default values
   const initialActiveEffects = Object.values(ShaderEffect).reduce(
     (effects, effect) => {
       effects[effect] = false;
@@ -118,10 +120,16 @@ const App = () => {
     {} as Record<ShaderEffect, boolean>
   );
 
-  const [activeEffects, setActiveEffects] = useState<Record<ShaderEffect, boolean>>(initialActiveEffects);
+  const [activeEffects, setActiveEffects] =
+    useState<Record<ShaderEffect, boolean>>(initialActiveEffects);
 
-  const [effectIntensities, setEffectIntensities] = useState<Record<ShaderEffect, number>>(() => {
-    const intensities: Record<ShaderEffect, number> = {} as Record<ShaderEffect, number>;
+  const [effectIntensities, setEffectIntensities] = useState<
+    Record<ShaderEffect, number>
+  >(() => {
+    const intensities: Record<ShaderEffect, number> = {} as Record<
+      ShaderEffect,
+      number
+    >;
     Object.values(ShaderEffect).forEach((effect) => {
       const effectDef = shaderEffects[effect];
       if (effectDef.intensity !== undefined) {
@@ -131,57 +139,64 @@ const App = () => {
     return intensities;
   });
 
-  // Transition state for smooth effect animations
-  const [effectTransitions, setEffectTransitions] = useState<EffectTransitions>(createInitialTransitions);
+  const [effectTransitions, setEffectTransitions] = useState<EffectTransitions>(
+    createInitialTransitions
+  );
 
-  // Computed rendering state based on transitions
-  const renderingEffects = useMemo(() => Object.fromEntries(
-    Object.values(ShaderEffect).map(effect => [
-      effect,
-      effectTransitions[effect].isActive
-    ])
-  ) as Record<ShaderEffect, boolean>, [effectTransitions]);
+  const renderingEffects = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.values(ShaderEffect).map((effect) => [
+          effect,
+          effectTransitions[effect].isActive,
+        ])
+      ) as Record<ShaderEffect, boolean>,
+    [effectTransitions]
+  );
 
-  const renderingIntensities = useMemo(() => Object.fromEntries(
-    Object.values(ShaderEffect).map(effect => {
-      const transition = effectTransitions[effect];
-      const effectDef = shaderEffects[effect];
+  const renderingIntensities = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.values(ShaderEffect).map((effect) => {
+          const transition = effectTransitions[effect];
+          const effectDef = shaderEffects[effect];
 
-      // For effects with intensity controls, use the actual value (including 0)
-      // For effects without intensity controls, default to 1
-      const hasIntensityControl = effectDef.intensity !== undefined;
-      const userIntensity = hasIntensityControl
-        ? (effectIntensities[effect] ?? effectDef.intensity)
-        : 1;
+          const hasIntensityControl = effectDef.intensity !== undefined;
+          const userIntensity = hasIntensityControl
+            ? effectIntensities[effect] ?? effectDef.intensity
+            : 1;
 
-      return [effect, transition.currentIntensity * userIntensity];
-    })
-  ) as Record<ShaderEffect, number>, [effectTransitions, effectIntensities]);
+          return [effect, transition.currentIntensity * userIntensity];
+        })
+      ) as Record<ShaderEffect, number>,
+    [effectTransitions, effectIntensities]
+  );
 
   const [showPanel, setShowPanel] = useState(false);
   const [inputSource, setInputSource] = useState("webcam");
   const [currentBlobUrl, setCurrentBlobUrl] = useState<string | null>(null);
-  
-  // Video playlist system
-  const [videoPlaylist, setVideoPlaylist] = useState<Array<{
-    id: string;
-    name: string;
-    url?: string;
-    file?: File;
-    isDefault?: boolean;
-  }>>([
+
+  const [videoPlaylist, setVideoPlaylist] = useState<
+    Array<{
+      id: string;
+      name: string;
+      url?: string;
+      file?: File;
+      isDefault?: boolean;
+    }>
+  >([
     {
-      id: 'big-buck-bunny',
-      name: 'Big Buck Bunny',
-      url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-      isDefault: true
-    }
+      id: "big-buck-bunny",
+      name: "Big Buck Bunny",
+      url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+      isDefault: true,
+    },
   ]);
-  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const [selectedVideoIndex, setSelectedVideoIndex] = useState(0);
+  const [loadedVideoIndex, setLoadedVideoIndex] = useState(0);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [videoPausedManually, setVideoPausedManually] = useState(false);
-  
-  // Video timeline state
+
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
@@ -210,35 +225,35 @@ const App = () => {
   const [fps, setFps] = useState(0);
   const [frameTime, setFrameTime] = useState(0);
   const [isPopupOpen, setIsPopupOpen] = useState(false);
-  const [showMidiSyncNotification, setShowMidiSyncNotification] = useState(false);
+  const [showMidiSyncNotification, setShowMidiSyncNotification] =
+    useState(false);
 
-  // Popup window reference
   const popupWindowRef = useRef<Window | null>(null);
 
-  // Performance tracking callback for WebGL renderer
-  const handleRenderPerformance = useCallback((renderFps: number, frameTimeMs: number) => {
-    setFps(renderFps);
-    setFrameTime(frameTimeMs);
-  }, []);
+  const handleRenderPerformance = useCallback(
+    (renderFps: number, frameTimeMs: number) => {
+      setFps(renderFps);
+      setFrameTime(frameTimeMs);
+    },
+    []
+  );
 
-  // Load settings from localStorage on mount only
   useEffect(() => {
     const savedSettings = settingsService.loadSettings();
 
-    if (savedSettings.showHelp !== undefined) setShowHelp(savedSettings.showHelp);
+    if (savedSettings.showHelp !== undefined)
+      setShowHelp(savedSettings.showHelp);
     if (savedSettings.isMuted !== undefined) setIsMuted(savedSettings.isMuted);
-    if (savedSettings.inputSource !== undefined) setInputSource(savedSettings.inputSource);
-    if (savedSettings.activeEffects !== undefined) setActiveEffects(savedSettings.activeEffects);
-    // No longer loading effectIntensities from localStorage - they should be controlled by MIDI only
-    if (savedSettings.loopClips !== undefined) setLoopClips(savedSettings.loopClips);
+    if (savedSettings.activeEffects !== undefined)
+      setActiveEffects(savedSettings.activeEffects);
+    if (savedSettings.loopClips !== undefined)
+      setLoopClips(savedSettings.loopClips);
     if (savedSettings.bpm !== undefined) setBpm(savedSettings.bpm);
-  }, []); // Empty dependency array - only run on mount
+  }, []);
 
-  // Save settings when they change (not on initialization)
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    // Skip saving during initial load
     if (!isInitialized) {
       setIsInitialized(true);
       return;
@@ -261,8 +276,6 @@ const App = () => {
     settingsService.saveActiveEffects(activeEffects);
   }, [activeEffects, isInitialized]);
 
-  // No longer saving effectIntensities to localStorage - they should be controlled by MIDI only
-
   useEffect(() => {
     if (!isInitialized) return;
     settingsService.saveLoopClips(loopClips);
@@ -273,7 +286,6 @@ const App = () => {
     settingsService.saveBpm(bpm);
   }, [bpm, isInitialized]);
 
-  // Apply mute state to video element
   useEffect(() => {
     const videoElement = videoRef.current;
     if (videoElement) {
@@ -281,17 +293,15 @@ const App = () => {
     }
   }, [isMuted]);
 
-  // Animation loop for smooth transitions
   useEffect(() => {
     let animationFrameId: number;
 
     function animate() {
       const now = performance.now();
 
-      setEffectTransitions(currentTransitions => {
+      setEffectTransitions((currentTransitions) => {
         const newTransitions = updateTransitions(currentTransitions, now);
 
-        // Continue animation if there are active transitions
         if (hasActiveTransitions(newTransitions)) {
           animationFrameId = requestAnimationFrame(animate);
         }
@@ -300,7 +310,6 @@ const App = () => {
       });
     }
 
-    // Start animation loop if there are active transitions
     if (hasActiveTransitions(effectTransitions)) {
       animationFrameId = requestAnimationFrame(animate);
     }
@@ -310,14 +319,12 @@ const App = () => {
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [effectTransitions]); // Re-run when transitions change
+  }, [effectTransitions]);
 
-  // Input Source Setup
   useEffect(() => {
     const videoElement = videoRef.current;
     if (!videoElement) return;
 
-    // Clean up previous blob URL if it exists
     if (currentBlobUrl) {
       URL.revokeObjectURL(currentBlobUrl);
       setCurrentBlobUrl(null);
@@ -332,10 +339,12 @@ const App = () => {
 
     if (inputSource === "webcam") {
       videoElement.src = "";
-      // Stop any playing video first
       videoElement.pause();
       setIsVideoPlaying(false);
-      
+
+      videoElement.load();
+      videoElement.currentTime = 0;
+
       navigator.mediaDevices
         .getUserMedia({ video: true })
         .then((stream) => {
@@ -344,40 +353,34 @@ const App = () => {
         })
         .catch(console.error);
     } else if (inputSource === "video") {
-      // Only pause if we were previously on webcam or if there's no current video
       const wasOnWebcam = videoElement.srcObject !== null;
       if (wasOnWebcam) {
         videoElement.pause();
         setIsVideoPlaying(false);
       }
 
-      // Load current video from playlist but don't auto-play unless switching from webcam
-      const currentVideo = videoPlaylist[currentVideoIndex];
-      if (currentVideo) {
-        // Only change source if it's different from current
+      const loadedVideo = videoPlaylist[loadedVideoIndex];
+      if (loadedVideo) {
         let newSrc = "";
-        if (currentVideo.file) {
-          const fileUrl = URL.createObjectURL(currentVideo.file);
+        if (loadedVideo.file) {
+          const fileUrl = URL.createObjectURL(loadedVideo.file);
           setCurrentBlobUrl(fileUrl);
           newSrc = fileUrl;
-        } else if (currentVideo.url) {
-          newSrc = currentVideo.url;
+        } else if (loadedVideo.url) {
+          newSrc = loadedVideo.url;
         }
 
-        // Only reload if source is actually changing
         if (videoElement.src !== newSrc) {
           videoElement.src = newSrc;
           videoElement.loop = false;
           videoElement.load();
         }
       } else {
-        // No videos in playlist - clear source for black screen
         videoElement.src = "";
       }
     }
-  }, [inputSource, currentVideoIndex, videoPlaylist]);
+  }, [inputSource, loadedVideoIndex, videoPlaylist]);
 
-  // Cleanup blob URL on component unmount or when currentBlobUrl changes
   useEffect(() => {
     return () => {
       if (currentBlobUrl) {
@@ -386,7 +389,6 @@ const App = () => {
     };
   }, [currentBlobUrl]);
 
-  // UI Handlers
   const handleContextMenu = (event: React.MouseEvent) => {
     event.preventDefault();
     setShowPanel((prev) => !prev);
@@ -396,7 +398,6 @@ const App = () => {
     setPlayingClips((prev) => ({ ...prev, [clipId]: false }));
   }, []);
 
-  // Multi-pass WebGL renderer (using computed rendering state for smooth transitions)
   useWebGLRenderer({
     canvasRef,
     videoRef,
@@ -411,29 +412,28 @@ const App = () => {
     onRenderPerformance: handleRenderPerformance,
   });
 
-
-
-  // Debounce to prevent rapid MIDI triggers
   const lastToggleTime = useRef<Record<string, number>>({});
 
   const handleCheckboxChange = useCallback((effect: ShaderEffect) => {
     const now = performance.now();
 
-    // Debounce: ignore rapid successive calls for the same effect
     const lastTime = lastToggleTime.current[effect] || 0;
-    if (now - lastTime < 50) { // 50ms debounce
+    if (now - lastTime < DEBOUNCE_DELAY_MS) {
       return;
     }
     lastToggleTime.current[effect] = now;
 
-    // Use functional update to get current state - fixes stale closure issue
     setActiveEffects((prev) => {
       const nextEffect = !prev[effect];
 
-      // Start smooth transition with current state
-      setEffectTransitions(currentTransitions => {
+      setEffectTransitions((currentTransitions) => {
         const targetIntensity = nextEffect ? 1 : 0;
-        const newTransitions = startTransition(currentTransitions, effect, targetIntensity, now);
+        const newTransitions = startTransition(
+          currentTransitions,
+          effect,
+          targetIntensity,
+          now
+        );
         return newTransitions;
       });
 
@@ -442,29 +442,31 @@ const App = () => {
         [effect]: nextEffect,
       };
     });
-  }, []); // Empty dependency array - no stale closure!
+  }, []);
 
-  const handleIntensityChange = useCallback((effect: ShaderEffect, intensity: number) => {
-    setEffectIntensities((prev) => ({
-      ...prev,
-      [effect]: intensity,
-    }));
+  const handleIntensityChange = useCallback(
+    (effect: ShaderEffect, intensity: number) => {
+      setEffectIntensities((prev) => ({
+        ...prev,
+        [effect]: intensity,
+      }));
 
-    // If effect has an active transition, update the target intensity
-    setEffectTransitions(currentTransitions => {
-      const transition = currentTransitions[effect];
-      if (transition.isActive && activeEffects[effect]) {
-        return {
-          ...currentTransitions,
-          [effect]: {
-            ...transition,
-            targetIntensity: 1, // Always target full intensity for active effects
-          }
-        };
-      }
-      return currentTransitions;
-    });
-  }, [activeEffects]);
+      setEffectTransitions((currentTransitions) => {
+        const transition = currentTransitions[effect];
+        if (transition.isActive && activeEffects[effect]) {
+          return {
+            ...currentTransitions,
+            [effect]: {
+              ...transition,
+              targetIntensity: 1,
+            },
+          };
+        }
+        return currentTransitions;
+      });
+    },
+    [activeEffects]
+  );
 
   const handlePlayToggle = useCallback((clipId: string) => {
     setPlayingClips((prev) => {
@@ -485,7 +487,10 @@ const App = () => {
     setInputSource(newSource);
   }, []);
 
-  // New playlist management functions
+  const handleVideoSelect = useCallback((index: number) => {
+    setSelectedVideoIndex(index);
+  }, []);
+
   const handleVideoPlayPause = useCallback(() => {
     const videoElement = videoRef.current;
     if (!videoElement || inputSource !== "video") return;
@@ -495,95 +500,157 @@ const App = () => {
       setIsVideoPlaying(false);
       setVideoPausedManually(true);
     } else {
-      videoElement.play().then(() => {
-        setIsVideoPlaying(true);
+      if (selectedVideoIndex !== loadedVideoIndex) {
+        setLoadedVideoIndex(selectedVideoIndex);
         setVideoPausedManually(false);
-      }).catch((err) => {
-        if (err.name !== 'AbortError') {
-          console.error("Error playing video:", err);
-        }
-      });
+        setTimeout(() => {
+          const video = videoRef.current;
+          if (video && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+            video
+              .play()
+              .then(() => {
+                setIsVideoPlaying(true);
+              })
+              .catch((err) => {
+                if (err.name !== "AbortError") {
+                  console.error("Error playing video:", err);
+                }
+              });
+          }
+        }, VIDEO_LOAD_DELAY_MS);
+      } else {
+        videoElement
+          .play()
+          .then(() => {
+            setIsVideoPlaying(true);
+            setVideoPausedManually(false);
+          })
+          .catch((err) => {
+            if (err.name !== "AbortError") {
+              console.error("Error playing video:", err);
+            }
+          });
+      }
     }
-  }, [isVideoPlaying, inputSource]);
+  }, [isVideoPlaying, inputSource, selectedVideoIndex, loadedVideoIndex]);
 
   const handleNextVideo = useCallback(() => {
     if (videoPlaylist.length <= 1) return;
-    const nextIndex = (currentVideoIndex + 1) % videoPlaylist.length;
-    const wasPlaying = isVideoPlaying;
-    setCurrentVideoIndex(nextIndex);
-    // Don't reset playback state - keep playing if it was playing
-    if (wasPlaying) {
-      // Small delay to let video load, then resume playback
+
+    if (isVideoPlaying) {
+      const nextIndex = (loadedVideoIndex + 1) % videoPlaylist.length;
+      setLoadedVideoIndex(nextIndex);
+      setSelectedVideoIndex(nextIndex);
+
       setTimeout(() => {
         const videoElement = videoRef.current;
         if (videoElement) {
-          videoElement.play().then(() => {
-            setIsVideoPlaying(true);
-          }).catch(console.error);
+          videoElement
+            .play()
+            .then(() => {
+              setIsVideoPlaying(true);
+            })
+            .catch(console.error);
         }
-      }, 100);
+      }, VIDEO_LOAD_DELAY_MS);
+    } else {
+      const nextIndex = (selectedVideoIndex + 1) % videoPlaylist.length;
+      setSelectedVideoIndex(nextIndex);
     }
-  }, [currentVideoIndex, videoPlaylist.length, isVideoPlaying]);
+  }, [
+    loadedVideoIndex,
+    selectedVideoIndex,
+    videoPlaylist.length,
+    isVideoPlaying,
+  ]);
 
   const handlePreviousVideo = useCallback(() => {
     if (videoPlaylist.length <= 1) return;
-    const prevIndex = currentVideoIndex === 0 ? videoPlaylist.length - 1 : currentVideoIndex - 1;
-    const wasPlaying = isVideoPlaying;
-    setCurrentVideoIndex(prevIndex);
-    // Don't reset playback state - keep playing if it was playing
-    if (wasPlaying) {
-      // Small delay to let video load, then resume playback
+
+    if (isVideoPlaying) {
+      const prevIndex =
+        loadedVideoIndex === 0
+          ? videoPlaylist.length - 1
+          : loadedVideoIndex - 1;
+      setLoadedVideoIndex(prevIndex);
+      setSelectedVideoIndex(prevIndex);
+
       setTimeout(() => {
         const videoElement = videoRef.current;
         if (videoElement) {
-          videoElement.play().then(() => {
-            setIsVideoPlaying(true);
-          }).catch(console.error);
+          videoElement
+            .play()
+            .then(() => {
+              setIsVideoPlaying(true);
+            })
+            .catch(console.error);
         }
-      }, 100);
+      }, VIDEO_LOAD_DELAY_MS);
+    } else {
+      const prevIndex =
+        selectedVideoIndex === 0
+          ? videoPlaylist.length - 1
+          : selectedVideoIndex - 1;
+      setSelectedVideoIndex(prevIndex);
     }
-  }, [currentVideoIndex, videoPlaylist.length, isVideoPlaying]);
+  }, [
+    loadedVideoIndex,
+    selectedVideoIndex,
+    videoPlaylist.length,
+    isVideoPlaying,
+  ]);
 
-  const handleAddVideosToPlaylist = useCallback((files: File[]) => {
-    const videoFiles = files.filter(file => file.type.startsWith('video/'));
-    const newVideos = videoFiles.map(file => ({
-      id: `video-${Date.now()}-${Math.random()}`,
-      name: file.name,
-      file
-    }));
-    
-    setVideoPlaylist(prev => [...prev, ...newVideos]);
-    
-    // Switch to first added video only if playlist was empty AND nothing is currently playing
-    if (videoPlaylist.length === 0 && newVideos.length > 0 && !isVideoPlaying) {
-      setCurrentVideoIndex(0);
-    }
-    
-    // Only switch to video input source if we're not already in video mode
-    if (newVideos.length > 0 && inputSource !== "video") {
-      setInputSource("video");
-    }
-  }, [videoPlaylist.length, isVideoPlaying, inputSource]);
+  const handleAddVideosToPlaylist = useCallback(
+    (files: File[]) => {
+      const videoFiles = files.filter((file) => file.type.startsWith("video/"));
+      const newVideos = videoFiles.map((file) => ({
+        id: `video-${Date.now()}-${Math.random()}`,
+        name: file.name,
+        file,
+      }));
 
-  const handleRemoveFromPlaylist = useCallback((videoId: string) => {
-    setVideoPlaylist(prev => {
-      const newPlaylist = prev.filter(video => video.id !== videoId);
-      // Adjust current index if needed
-      if (currentVideoIndex >= newPlaylist.length) {
-        setCurrentVideoIndex(Math.max(0, newPlaylist.length - 1));
+      setVideoPlaylist((prev) => [...prev, ...newVideos]);
+
+      if (
+        videoPlaylist.length === 0 &&
+        newVideos.length > 0 &&
+        !isVideoPlaying
+      ) {
+        setSelectedVideoIndex(0);
+        setLoadedVideoIndex(0);
       }
-      return newPlaylist;
-    });
-  }, [currentVideoIndex]);
 
-  // Handle video ended event to go to next video
+      if (newVideos.length > 0 && inputSource !== "video") {
+        setInputSource("video");
+      }
+    },
+    [videoPlaylist.length, isVideoPlaying, inputSource]
+  );
+
+  const handleRemoveFromPlaylist = useCallback(
+    (videoId: string) => {
+      setVideoPlaylist((prev) => {
+        const newPlaylist = prev.filter((video) => video.id !== videoId);
+
+        if (selectedVideoIndex >= newPlaylist.length) {
+          setSelectedVideoIndex(Math.max(0, newPlaylist.length - 1));
+        }
+        if (loadedVideoIndex >= newPlaylist.length) {
+          setLoadedVideoIndex(Math.max(0, newPlaylist.length - 1));
+        }
+
+        return newPlaylist;
+      });
+    },
+    [selectedVideoIndex, loadedVideoIndex]
+  );
+
   useEffect(() => {
     const videoElement = videoRef.current;
     if (!videoElement) return;
 
     const handleVideoEnded = () => {
       if (inputSource === "video" && !videoPausedManually) {
-        // Auto-advance to next video
         handleNextVideo();
       }
     };
@@ -603,27 +670,29 @@ const App = () => {
       setDuration(videoElement.duration);
     };
 
-    videoElement.addEventListener('ended', handleVideoEnded);
-    videoElement.addEventListener('timeupdate', handleTimeUpdate);
-    videoElement.addEventListener('loadedmetadata', handleLoadedMetadata);
-    videoElement.addEventListener('durationchange', handleDurationChange);
+    videoElement.addEventListener("ended", handleVideoEnded);
+    videoElement.addEventListener("timeupdate", handleTimeUpdate);
+    videoElement.addEventListener("loadedmetadata", handleLoadedMetadata);
+    videoElement.addEventListener("durationchange", handleDurationChange);
 
     return () => {
-      videoElement.removeEventListener('ended', handleVideoEnded);
-      videoElement.removeEventListener('timeupdate', handleTimeUpdate);
-      videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      videoElement.removeEventListener('durationchange', handleDurationChange);
+      videoElement.removeEventListener("ended", handleVideoEnded);
+      videoElement.removeEventListener("timeupdate", handleTimeUpdate);
+      videoElement.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      videoElement.removeEventListener("durationchange", handleDurationChange);
     };
   }, [inputSource, videoPausedManually, handleNextVideo, isSeeking]);
 
-  // Timeline seeking handlers
-  const handleSeek = useCallback((time: number) => {
-    const videoElement = videoRef.current;
-    if (videoElement && inputSource === "video") {
-      videoElement.currentTime = time;
-      setCurrentTime(time);
-    }
-  }, [inputSource]);
+  const handleSeek = useCallback(
+    (time: number) => {
+      const videoElement = videoRef.current;
+      if (videoElement && inputSource === "video") {
+        videoElement.currentTime = time;
+        setCurrentTime(time);
+      }
+    },
+    [inputSource]
+  );
 
   const handleSeekStart = useCallback(() => {
     setIsSeeking(true);
@@ -637,30 +706,29 @@ const App = () => {
     setIsMuted((prev) => !prev);
   }, []);
 
-  // MIDI hook configuration
-  const midiConfig: MidiConfig = useMemo(() => ({
-    onEffectToggle: (effect: ShaderEffect) => {
-      handleCheckboxChange(effect);
-    },
-    onIntensityChange: (effect: ShaderEffect, intensity: number) => {
-      setEffectIntensities(prev => ({
-        ...prev,
-        [effect]: intensity
-      }));
-    },
-    onMidiConnect: () => {
-      // Show notification to sync knobs
-      setShowMidiSyncNotification(true);
-      // Hide notification after 5 seconds
-      setTimeout(() => {
-        setShowMidiSyncNotification(false);
-      }, 5000);
-    },
-  }), [handleCheckboxChange]);
+  const midiConfig: MidiConfig = useMemo(
+    () => ({
+      onEffectToggle: (effect: ShaderEffect) => {
+        handleCheckboxChange(effect);
+      },
+      onIntensityChange: (effect: ShaderEffect, intensity: number) => {
+        setEffectIntensities((prev) => ({
+          ...prev,
+          [effect]: intensity,
+        }));
+      },
+      onMidiConnect: () => {
+        setShowMidiSyncNotification(true);
+        setTimeout(() => {
+          setShowMidiSyncNotification(false);
+        }, MIDI_NOTIFICATION_DURATION_MS);
+      },
+    }),
+    [handleCheckboxChange]
+  );
 
   const midi = useMidi(midiConfig);
 
-  // Popup window handlers
   const openPopupWindow = useCallback(() => {
     if (popupWindowRef.current && !popupWindowRef.current.closed) {
       popupWindowRef.current.focus();
@@ -668,32 +736,30 @@ const App = () => {
     }
 
     const popup = window.open(
-      '',
-      'controlPanel',
-      'width=450,height=700,resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no,status=no,left=100,top=100'
+      "",
+      "controlPanel",
+      "width=450,height=700,resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no,status=no,left=100,top=100"
     );
 
     if (popup) {
       popupWindowRef.current = popup;
       setIsPopupOpen(true);
 
-      // Setup popup window
-      popup.document.title = 'Play WebGL Controls';
+      popup.document.title = "Play WebGL Controls";
 
-      // Copy all CSS from parent window to popup
       const styles = Array.from(document.styleSheets);
       styles.forEach((styleSheet) => {
         try {
           if (styleSheet.href) {
-            // External stylesheet
-            const link = popup.document.createElement('link');
-            link.rel = 'stylesheet';
+            const link = popup.document.createElement("link");
+            link.rel = "stylesheet";
             link.href = styleSheet.href;
             popup.document.head.appendChild(link);
           } else if (styleSheet.cssRules) {
-            // Inline styles
-            const style = popup.document.createElement('style');
-            const cssText = Array.from(styleSheet.cssRules).map(rule => rule.cssText).join('\n');
+            const style = popup.document.createElement("style");
+            const cssText = Array.from(styleSheet.cssRules)
+              .map((rule) => rule.cssText)
+              .join("\n");
             style.textContent = cssText;
             popup.document.head.appendChild(style);
           }
@@ -702,20 +768,17 @@ const App = () => {
         }
       });
 
-      // Create container for React content
-      const container = popup.document.createElement('div');
-      container.id = 'popup-root';
+      const container = popup.document.createElement("div");
+      container.id = "popup-root";
       popup.document.body.appendChild(container);
 
-      // Handle popup close
-      popup.addEventListener('beforeunload', () => {
+      popup.addEventListener("beforeunload", () => {
         setIsPopupOpen(false);
         popupWindowRef.current = null;
       });
     }
   }, []);
 
-  // Clean up popup on unmount
   useEffect(() => {
     return () => {
       if (popupWindowRef.current && !popupWindowRef.current.closed) {
@@ -724,13 +787,17 @@ const App = () => {
     };
   }, []);
 
-  // Render control panel in popup window
   const popupControlPanel = useMemo(() => {
-    if (!isPopupOpen || !popupWindowRef.current || popupWindowRef.current.closed) {
+    if (
+      !isPopupOpen ||
+      !popupWindowRef.current ||
+      popupWindowRef.current.closed
+    ) {
       return null;
     }
 
-    const popupContainer = popupWindowRef.current.document.getElementById('popup-root');
+    const popupContainer =
+      popupWindowRef.current.document.getElementById("popup-root");
     if (!popupContainer) return null;
 
     return createPortal(
@@ -746,7 +813,6 @@ const App = () => {
         midiDeviceName={midi.deviceName}
         isPopupMode={true}
         onInputSourceChange={handleInputSourceChange}
-        onFileSelected={() => {}} // This function is no longer used
         onIntensityChange={handleIntensityChange}
         onLoopToggle={handleLoopToggle}
         onMuteToggle={handleMuteToggle}
@@ -756,8 +822,10 @@ const App = () => {
         playingClips={playingClips}
         showHelp={showHelp}
         videoPlaylist={videoPlaylist}
-        currentVideoIndex={currentVideoIndex}
+        selectedVideoIndex={selectedVideoIndex}
+        loadedVideoIndex={loadedVideoIndex}
         isVideoPlaying={isVideoPlaying}
+        onVideoSelect={handleVideoSelect}
         onVideoPlayPause={handleVideoPlayPause}
         onNextVideo={handleNextVideo}
         onPreviousVideo={handlePreviousVideo}
@@ -792,8 +860,10 @@ const App = () => {
     handlePlayToggle,
     handleCheckboxChange,
     videoPlaylist,
-    currentVideoIndex,
+    selectedVideoIndex,
+    loadedVideoIndex,
     isVideoPlaying,
+    handleVideoSelect,
     handleVideoPlayPause,
     handleNextVideo,
     handlePreviousVideo,
@@ -847,7 +917,6 @@ const App = () => {
             midiConnected={midi.connected}
             midiDeviceName={midi.deviceName}
             onInputSourceChange={handleInputSourceChange}
-            onFileSelected={() => {}} // This function is no longer used
             onIntensityChange={handleIntensityChange}
             onLoopToggle={handleLoopToggle}
             onMuteToggle={handleMuteToggle}
@@ -857,8 +926,10 @@ const App = () => {
             playingClips={playingClips}
             showHelp={showHelp}
             videoPlaylist={videoPlaylist}
-            currentVideoIndex={currentVideoIndex}
+            selectedVideoIndex={selectedVideoIndex}
+            loadedVideoIndex={loadedVideoIndex}
             isVideoPlaying={isVideoPlaying}
+            onVideoSelect={handleVideoSelect}
             onVideoPlayPause={handleVideoPlayPause}
             onNextVideo={handleNextVideo}
             onPreviousVideo={handlePreviousVideo}
@@ -914,9 +985,13 @@ const App = () => {
             pointerEvents: "none",
           }}
         >
-          <div>Right click to show controls | Spacebar to tap BPM | Q/W/E/R for beat-based clips | "Pop Out Controls" to detach panel</div>
+          <div>
+            Right click to show controls | Spacebar to tap BPM | Q/W/E/R for
+            beat-based clips | "Pop Out Controls" to detach panel
+          </div>
           <div style={{ fontSize: "12px", marginTop: "5px", opacity: 0.8 }}>
-            Version: {VERSION} | GPU FPS: {fps} | Frame Time: {frameTime.toFixed(2)}ms
+            Version: {VERSION} | GPU FPS: {fps} | Frame Time:{" "}
+            {frameTime.toFixed(2)}ms
             {midi.connected && (
               <span style={{ color: "#00ff00", marginLeft: "10px" }}>
                 🎹 MIDI: {midi.deviceName}
@@ -929,18 +1004,21 @@ const App = () => {
             )}
           </div>
           {showMidiSyncNotification && (
-            <div style={{
-              fontSize: "14px",
-              marginTop: "10px",
-              color: "#ffff00",
-              backgroundColor: "rgba(0, 0, 0, 0.8)",
-              padding: "10px 20px",
-              borderRadius: "4px",
-              display: "inline-block",
-              pointerEvents: "none",
-              animation: "fadeIn 0.3s ease-in-out"
-            }}>
-              🎛️ MIDI Connected! Move each knob slightly to sync with current positions
+            <div
+              style={{
+                fontSize: "14px",
+                marginTop: "10px",
+                color: "#ffff00",
+                backgroundColor: "rgba(0, 0, 0, 0.8)",
+                padding: "10px 20px",
+                borderRadius: "4px",
+                display: "inline-block",
+                pointerEvents: "none",
+                animation: "fadeIn 0.3s ease-in-out",
+              }}
+            >
+              🎛️ MIDI Connected! Move each knob slightly to sync with current
+              positions
             </div>
           )}
         </div>

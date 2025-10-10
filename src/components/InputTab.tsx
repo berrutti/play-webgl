@@ -12,8 +12,10 @@ interface InputTabProps {
     file?: File;
     isDefault?: boolean;
   }>;
-  currentVideoIndex: number;
+  selectedVideoIndex: number;
+  loadedVideoIndex: number;
   isVideoPlaying: boolean;
+  onVideoSelect: (index: number) => void;
   onVideoPlayPause: () => void;
   onNextVideo: () => void;
   onPreviousVideo: () => void;
@@ -32,8 +34,10 @@ export const InputTab: React.FC<InputTabProps> = ({
   isMuted,
   onMuteToggle,
   videoPlaylist,
-  currentVideoIndex,
+  selectedVideoIndex,
+  loadedVideoIndex,
   isVideoPlaying,
+  onVideoSelect,
   onVideoPlayPause,
   onNextVideo,
   onPreviousVideo,
@@ -135,7 +139,7 @@ export const InputTab: React.FC<InputTabProps> = ({
   // Calculate progress percentage for timeline display
   const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
 
-  const currentVideo = videoPlaylist[currentVideoIndex];
+  const currentVideo = videoPlaylist[loadedVideoIndex];
 
   return (
     <div className="tab-content">
@@ -160,7 +164,7 @@ export const InputTab: React.FC<InputTabProps> = ({
           {currentVideo && (
             <div className="current-video-display">
               <div className="video-title">{currentVideo.name}</div>
-              <div className="video-position">{currentVideoIndex + 1} of {videoPlaylist.length}</div>
+              <div className="video-position">{loadedVideoIndex + 1} of {videoPlaylist.length}</div>
             </div>
           )}
 
@@ -255,21 +259,33 @@ export const InputTab: React.FC<InputTabProps> = ({
               {videoPlaylist.map((video, index) => (
                 <div
                   key={video.id}
-                  className={`playlist-row ${index === currentVideoIndex ? 'current' : ''}`}
+                  className={`playlist-row ${
+                    index === selectedVideoIndex ? 'selected' : ''
+                  } ${
+                    index === loadedVideoIndex && isVideoPlaying ? 'playing' : ''
+                  }`}
+                  onClick={() => onVideoSelect(index)}
+                  style={{ cursor: 'pointer' }}
                 >
                   <div className="playlist-number">{index + 1}</div>
                   <div className="playlist-info">
                     <div className="playlist-name">{video.name}</div>
-                    {index === currentVideoIndex && (
+                    {index === loadedVideoIndex && (
                       <div className="playlist-status">
-                        {isVideoPlaying ? 'Playing' : 'Paused'}
+                        {isVideoPlaying ? 'Playing' : 'Loaded'}
                       </div>
+                    )}
+                    {index === selectedVideoIndex && index !== loadedVideoIndex && (
+                      <div className="playlist-status">Selected</div>
                     )}
                   </div>
                   {!video.isDefault && (
                     <button
                       className="remove-btn"
-                      onClick={() => onRemoveFromPlaylist(video.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemoveFromPlaylist(video.id);
+                      }}
                       title="Remove from playlist"
                     >
                       ×
