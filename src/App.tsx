@@ -200,7 +200,7 @@ const App = () => {
   const midi = useMidi(midiConfig);
 
   const renderControlPanel = useCallback(
-    (isPopupMode: boolean) => (
+    (isPopupMode: boolean, openPopupFn?: () => void) => (
       <ControlPanel
         activeEffects={effectTransitions.activeEffects}
         bpm={bpm}
@@ -242,6 +242,7 @@ const App = () => {
         currentTime={playlist.currentTime}
         duration={playlist.duration}
         isSeeking={playlist.isSeeking}
+        onPopOutClick={isPopupMode ? undefined : openPopupFn}
       />
     ),
     [
@@ -289,36 +290,7 @@ const App = () => {
             zIndex: 10,
           }}
         >
-          {renderControlPanel(false)}
-        </div>
-      )}
-
-      {showPanel && !isPopupOpen && (
-        <div
-          style={{
-            position: "absolute",
-            top: "20px",
-            right: "430px",
-            zIndex: 10,
-          }}
-        >
-          <button
-            onClick={openPopupWindow}
-            style={{
-              backgroundColor: "#007bff",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              padding: "10px 16px",
-              cursor: "pointer",
-              fontSize: "14px",
-              fontWeight: "500",
-              boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
-            }}
-            title="Open controls in popup window"
-          >
-            Pop Out Controls
-          </button>
+          {renderControlPanel(false, openPopupWindow)}
         </div>
       )}
 

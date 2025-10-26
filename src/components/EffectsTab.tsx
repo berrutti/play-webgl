@@ -85,15 +85,46 @@ export const EffectsTab: React.FC<EffectsTabProps> = ({
     const hasIntensity = effectDef.intensity !== undefined;
     const isMidiControlled = midiControlledEffects.includes(effect);
 
+    const handleGridItemClick = (e: React.MouseEvent) => {
+      if (isPopupMode) {
+        // Only prevent toggle if clicking on interactive elements
+        const target = e.target as HTMLElement;
+        if (!target.closest('input[type="range"]') && !target.closest('input[type="checkbox"]')) {
+          onToggleEffect(effect);
+        }
+      }
+    };
+
+    const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      e.stopPropagation();
+      onToggleEffect(effect);
+    };
+
+    const handleGridItemKeyDown = (e: React.KeyboardEvent) => {
+      if (isPopupMode && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        onToggleEffect(effect);
+      }
+    };
+
     return (
-      <div key={effect} className={`effect-item ${isMidiControlled ? 'midi-controlled' : ''} ${isPopupMode ? 'grid-item' : ''}`}>
-        <div className="checkbox-group">
+      <div
+        key={effect}
+        className={`effect-item ${isMidiControlled ? 'midi-controlled' : ''} ${isPopupMode ? 'grid-item' : ''}`}
+        onClick={handleGridItemClick}
+        onKeyDown={handleGridItemKeyDown}
+        tabIndex={isPopupMode ? 0 : undefined}
+        role={isPopupMode ? 'button' : undefined}
+        aria-label={isPopupMode ? `Toggle ${effect} effect` : undefined}
+      >
+        <div className="checkbox-group" onClick={(e) => { if (isPopupMode) e.stopPropagation(); onToggleEffect(effect); }}>
           <input
             type="checkbox"
             id={`effect-${effect}`}
             className="control-checkbox"
             checked={activeEffects[effect]}
-            onChange={() => onToggleEffect(effect)}
+            onChange={handleCheckboxChange}
+            tabIndex={isPopupMode ? -1 : undefined}
           />
           <label htmlFor={`effect-${effect}`} className="checkbox-label">
             {isPopupMode ? effect.toUpperCase() : effect.charAt(0).toUpperCase() + effect.slice(1).toLowerCase()}
@@ -112,12 +143,13 @@ export const EffectsTab: React.FC<EffectsTabProps> = ({
               className={`intensity-slider ${isMidiControlled ? 'midi-controlled' : ''}`}
               disabled={!activeEffects[effect] || (midiConnected && isMidiControlled)}
               title={
-                midiConnected && isMidiControlled 
-                  ? 'This effect intensity is controlled by MIDI knobs - mouse control disabled' 
-                  : !activeEffects[effect] 
+                midiConnected && isMidiControlled
+                  ? 'This effect intensity is controlled by MIDI knobs - mouse control disabled'
+                  : !activeEffects[effect]
                     ? 'Enable effect to adjust intensity'
                     : ''
               }
+              onClick={(e) => e.stopPropagation()}
             />
             <span className="intensity-value">
               {Math.round(effectIntensities[effect] * 100)}%

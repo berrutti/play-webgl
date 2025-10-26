@@ -45,6 +45,7 @@ interface ControlPanelProps {
   currentTime: number;
   duration: number;
   isSeeking: boolean;
+  onPopOutClick?: () => void;
 }
 
 type TabType = 'input' | 'clips' | 'effects';
@@ -84,6 +85,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onSeekEnd,
   currentTime,
   duration,
+  onPopOutClick,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('input');
 
@@ -159,6 +161,18 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           midiDeviceName={midiDeviceName}
           isPopupMode={isPopupMode}
         />
+      )}
+
+      {!isPopupMode && onPopOutClick && (
+        <div className="pop-out-footer">
+          <button
+            onClick={onPopOutClick}
+            className="pop-out-button"
+            title="Open controls in popup window"
+          >
+            Pop Out Controls
+          </button>
+        </div>
       )}
     </div>
   );
