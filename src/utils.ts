@@ -256,18 +256,6 @@ export const shaderEffects: Record<ShaderEffect, ShaderEffectDef> = {
   },
 };
 
-export interface ClipInstruction {
-  effect: ShaderEffect;
-  startBeat: number;      // Which beat to start on (1-based, like music)
-  lengthBeats: number;    // How many beats the effect lasts
-}
-
-export interface Clip {
-  id: string;
-  name: string;
-  instructions: ClipInstruction[];
-}
-
 export function getTextureCoordinates(
   videoWidth: number,
   videoHeight: number,
@@ -316,38 +304,3 @@ export function getTextureCoordinates(
     ]);
   }
 }
-
-export const clips: Clip[] = [
-  {
-    id: "1",
-    name: "Grayscale then Invert",
-    instructions: [
-      { effect: ShaderEffect.GRAYSCALE, startBeat: 1, lengthBeats: 4 },     // Beats 1-4
-      { effect: ShaderEffect.INVERT, startBeat: 3, lengthBeats: 4 },        // Beats 3-6 (overlap)
-    ],
-  },
-  {
-    id: "2",
-    name: "Rhythmic Sine Wave",
-    instructions: [
-      { effect: ShaderEffect.REALITY_GLITCH, startBeat: 1, lengthBeats: 4 },     // Beats 1-4
-      { effect: ShaderEffect.REALITY_GLITCH, startBeat: 7, lengthBeats: 0.5 },   // Beat 7 (short accent)
-    ],
-  },
-  {
-    id: "3",
-    name: "Double Beat Invert",
-    instructions: [
-      { effect: ShaderEffect.INVERT, startBeat: 1, lengthBeats: 1 },        // Beat 1
-      { effect: ShaderEffect.INVERT, startBeat: 3, lengthBeats: 1 },        // Beat 3
-    ],
-  },
-  {
-    id: "4",
-    name: "Kaleidoscope Drop",
-    instructions: [
-      { effect: ShaderEffect.KALEIDOSCOPE, startBeat: 1, lengthBeats: 8 },  // Full 2-bar phrase
-      { effect: ShaderEffect.CHROMA, startBeat: 5, lengthBeats: 2 },        // Add chroma in second bar
-    ],
-  },
-];

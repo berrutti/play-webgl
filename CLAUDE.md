@@ -17,7 +17,7 @@ Real-time WebGL video effects application with MIDI controller integration. User
 App.tsx (~380 lines) coordinates 6 custom hooks that separate concerns:
 
 1. **useBpmTap** - BPM tap tempo calculation from spacebar
-2. **useSettings** - Settings persistence to localStorage (showHelp, isMuted, inputSource, loopClips, bpm)
+2. **useSettings** - Settings persistence to localStorage (showHelp, isMuted, inputSource, bpm)
 3. **useEffectTransitions** - **CRITICAL**: Single source of truth for `activeEffects` state + smooth effect transitions
 4. **useVideoPlaylist** - Video playlist management, playback controls
 5. **useVideoSource** - Video element source management (webcam vs file)
@@ -101,8 +101,8 @@ src/
 ### Settings Persistence
 
 **settingsService** (src/services/settingsService.ts):
-- Saves/loads to localStorage with key prefix 'webgl-video-'
-- Settings: showHelp, isMuted, inputSource, loopClips, bpm, activeEffects, effectIntensities
+- Saves/loads to localStorage with key prefix 'play-webgl-'
+- Settings: showHelp, isMuted, inputSource, bpm, activeEffects, effectIntensities
 
 **Initialization Pattern**:
 - Hooks use `isInitialized` flag to prevent saving on first mount
@@ -210,7 +210,6 @@ src/
 - [ ] Add tests for useWebGLRenderer (requires WebGL context mocking)
 - [ ] Add more shader effects
 - [ ] Add effect presets/combinations
-- [ ] Add timeline/sequencer for clip scheduling
 - [ ] Add audio reactivity (frequency analysis)
 
 ## Context for Next Session
@@ -221,6 +220,7 @@ When you return to this project:
 3. Review recent git history if needed
 4. Always ask before modifying logic
 5. Remember: activeEffects only lives in useEffectTransitions
+6. Clip functionality has been removed - effects are manually toggled only
 
 ## Contact & Links
 

@@ -1,5 +1,11 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { clips, ShaderEffect, shaderEffects } from "./utils";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+} from "react";
+import { ShaderEffect, shaderEffects } from "./utils";
 import { useWebGLRenderer } from "./hooks/useWebGLRenderer";
 import { useMidi, type MidiConfig } from "./hooks/useMidi";
 import { useBpmTap } from "./hooks/useBpmTap";
@@ -14,13 +20,6 @@ import packageJson from "../package.json";
 const VERSION = packageJson.version;
 const MIDI_NOTIFICATION_DURATION_MS = 5000;
 
-const clipKeyBindings: Record<string, string> = {
-  q: clips[0].id,
-  w: clips[1].id,
-  e: clips[2].id,
-  r: clips[3].id,
-};
-
 const App = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -28,31 +27,23 @@ const App = () => {
   const [showPanel, setShowPanel] = useState(false);
   const [fps, setFps] = useState(0);
   const [frameTime, setFrameTime] = useState(0);
-  const [showMidiSyncNotification, setShowMidiSyncNotification] = useState(false);
-
-  const [playingClips, setPlayingClips] = useState<Record<string, boolean>>(() =>
-    clips.reduce((acc, clip) => {
-      acc[clip.id] = false;
-      return acc;
-    }, {} as Record<string, boolean>)
-  );
-
-  const [clipStartTimes, setClipStartTimes] = useState<Record<string, number>>({});
+  const [showMidiSyncNotification, setShowMidiSyncNotification] =
+    useState(false);
 
   const initialActiveEffects = useMemo(
     () =>
-      Object.values(ShaderEffect).reduce(
-        (effects, effect) => {
-          effects[effect] = false;
-          return effects;
-        },
-        {} as Record<ShaderEffect, boolean>
-      ),
+      Object.values(ShaderEffect).reduce((effects, effect) => {
+        effects[effect] = false;
+        return effects;
+      }, {} as Record<ShaderEffect, boolean>),
     []
   );
 
   const initialIntensities = useMemo(() => {
-    const intensities: Record<ShaderEffect, number> = {} as Record<ShaderEffect, number>;
+    const intensities: Record<ShaderEffect, number> = {} as Record<
+      ShaderEffect,
+      number
+    >;
     Object.values(ShaderEffect).forEach((effect) => {
       const effectDef = shaderEffects[effect];
       if (effectDef.intensity !== undefined) {
@@ -62,18 +53,9 @@ const App = () => {
     return intensities;
   }, []);
 
-  const initialLoopClips = useMemo(
-    () =>
-      clips.reduce((acc, clip) => {
-        acc[clip.id] = false;
-        return acc;
-      }, {} as Record<string, boolean>),
-    []
-  );
-
   const { bpm, isSettingBpm } = useBpmTap();
 
-  const settings = useSettings(initialLoopClips);
+  const settings = useSettings();
 
   const effectTransitions = useEffectTransitions(
     initialActiveEffects,
@@ -105,44 +87,24 @@ const App = () => {
     }
   }, [settings.isMuted]);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat) return;
-
-      if (event.code === "Space") {
-        return;
-      }
-
-      const clipId = clipKeyBindings[event.key];
-      if (!clipId) return;
-
-      setPlayingClips((prev) => {
-        const now = performance.now() / 1000;
-        const isNowPlaying = !prev[clipId];
-        if (isNowPlaying) {
-          setClipStartTimes((times) => ({ ...times, [clipId]: now }));
-        }
-        return { ...prev, [clipId]: isNowPlaying };
-      });
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
-
   const handleContextMenu = (event: React.MouseEvent) => {
     event.preventDefault();
     setShowPanel((prev) => !prev);
   };
 
-  const handleClipFinished = useCallback((clipId: string) => {
-    setPlayingClips((prev) => ({ ...prev, [clipId]: false }));
-  }, []);
-
+  // Throttle FPS updates to avoid constant re-renders
+  const fpsDataRef = useRef({ fps: 0, frameTime: 0, lastUpdate: 0 });
   const handleRenderPerformance = useCallback(
     (renderFps: number, frameTimeMs: number) => {
-      setFps(renderFps);
-      setFrameTime(frameTimeMs);
+      fpsDataRef.current.fps = renderFps;
+      fpsDataRef.current.frameTime = frameTimeMs;
+
+      const now = performance.now();
+      if (now - fpsDataRef.current.lastUpdate > 500) {
+        setFps(renderFps);
+        setFrameTime(frameTimeMs);
+        fpsDataRef.current.lastUpdate = now;
+      }
     },
     []
   );
@@ -152,25 +114,10 @@ const App = () => {
     videoRef,
     activeEffects: effectTransitions.renderingEffects,
     effectIntensities: effectTransitions.renderingIntensities,
-    playingClips,
-    loopClips: settings.loopClips,
-    clipStartTimes,
     inputSource: settings.inputSource,
     bpm,
-    onClipFinished: handleClipFinished,
     onRenderPerformance: handleRenderPerformance,
   });
-
-  const handlePlayToggle = useCallback((clipId: string) => {
-    setPlayingClips((prev) => {
-      const now = performance.now() / 1000;
-      const isNowPlaying = !prev[clipId];
-      if (isNowPlaying) {
-        setClipStartTimes((times) => ({ ...times, [clipId]: now }));
-      }
-      return { ...prev, [clipId]: isNowPlaying };
-    });
-  }, []);
 
   const handleMuteToggle = useCallback(() => {
     settings.setIsMuted((prev: boolean) => !prev);
@@ -182,10 +129,12 @@ const App = () => {
         effectTransitions.handleToggleEffect(effect);
       },
       onIntensityChange: (effect: ShaderEffect, intensity: number) => {
-        effectTransitions.setEffectIntensities((prev: Record<ShaderEffect, number>) => ({
-          ...prev,
-          [effect]: intensity,
-        }));
+        effectTransitions.setEffectIntensities(
+          (prev: Record<ShaderEffect, number>) => ({
+            ...prev,
+            [effect]: intensity,
+          })
+        );
       },
       onMidiConnect: () => {
         setShowMidiSyncNotification(true);
@@ -207,24 +156,15 @@ const App = () => {
         effectIntensities={effectTransitions.effectIntensities}
         inputSource={settings.inputSource}
         isSettingBpm={isSettingBpm}
-        loopClips={settings.loopClips}
         isMuted={settings.isMuted}
         midiConnected={midi.connected}
         midiDeviceName={midi.deviceName}
         isPopupMode={isPopupMode}
         onInputSourceChange={settings.setInputSource}
         onIntensityChange={effectTransitions.handleIntensityChange}
-        onLoopToggle={(clipId: string) => {
-          settings.setLoopClips((prev: Record<string, boolean>) => ({
-            ...prev,
-            [clipId]: !prev[clipId]
-          }));
-        }}
         onMuteToggle={handleMuteToggle}
-        onPlayToggle={handlePlayToggle}
         onToggleEffect={effectTransitions.handleToggleEffect}
         onToggleHelp={() => settings.setShowHelp((prev: boolean) => !prev)}
-        playingClips={playingClips}
         showHelp={settings.showHelp}
         videoPlaylist={playlist.videoPlaylist}
         selectedVideoIndex={playlist.selectedVideoIndex}
@@ -252,8 +192,6 @@ const App = () => {
       settings,
       midi,
       handleMuteToggle,
-      handlePlayToggle,
-      playingClips,
       playlist,
     ]
   );
@@ -306,8 +244,8 @@ const App = () => {
           }}
         >
           <div>
-            Right click to show controls | Spacebar to tap BPM | Q/W/E/R for
-            beat-based clips | "Pop Out Controls" to detach panel
+            Right click to show controls | Spacebar to tap BPM | "Pop Out
+            Controls" to detach panel
           </div>
           <div style={{ fontSize: "12px", marginTop: "5px", opacity: 0.8 }}>
             Version: {VERSION} | GPU FPS: {fps} | Frame Time:{" "}

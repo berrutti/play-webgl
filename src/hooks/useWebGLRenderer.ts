@@ -1,6 +1,6 @@
 import { useRef, useEffect } from "react";
-import { ShaderEffect, shaderEffects, clips, getTextureCoordinates } from "../utils";
-import { 
+import { ShaderEffect, shaderEffects, getTextureCoordinates } from "../utils";
+import {
   multiPassVertexShader,
   createPassthroughShader,
   createEffectShader,
@@ -12,12 +12,8 @@ export interface UseWebGLRendererProps {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   activeEffects: Record<ShaderEffect, boolean>;
   effectIntensities: Record<ShaderEffect, number>;
-  playingClips: Record<string, boolean>;
-  loopClips: Record<string, boolean>;
-  clipStartTimes: Record<string, number>;
   inputSource: string;
   bpm: number;
-  onClipFinished: (clipId: string) => void;
   onRenderPerformance?: (fps: number, frameTime: number) => void;
 }
 
@@ -104,15 +100,26 @@ export function useWebGLRenderer({
   videoRef,
   activeEffects,
   effectIntensities,
-  playingClips,
-  loopClips,
-  clipStartTimes,
   inputSource,
   bpm,
-  onClipFinished,
   onRenderPerformance,
 }: UseWebGLRendererProps) {
   const glRef = useRef<WebGLRenderingContext | null>(null);
+
+  // Track previous values to detect what changed
+  const prevPropsRef = useRef({ activeEffects, effectIntensities, inputSource, bpm });
+
+  const changedProps = [];
+  if (prevPropsRef.current.activeEffects !== activeEffects) changedProps.push('activeEffects');
+  if (prevPropsRef.current.effectIntensities !== effectIntensities) changedProps.push('effectIntensities');
+  if (prevPropsRef.current.inputSource !== inputSource) changedProps.push('inputSource');
+  if (prevPropsRef.current.bpm !== bpm) changedProps.push('bpm');
+
+  if (changedProps.length > 0) {
+    console.log('[useWebGLRenderer] Props changed:', changedProps);
+  }
+
+  prevPropsRef.current = { activeEffects, effectIntensities, inputSource, bpm };
   const videoTextureRef = useRef<WebGLTexture | null>(null);
   const renderTargetsRef = useRef<RenderTarget[]>([]);
   const shadersRef = useRef<Record<string, ShaderProgram>>({});
@@ -147,6 +154,7 @@ export function useWebGLRenderer({
 
   // Initialize WebGL context and resources
   useEffect(() => {
+    console.log('[useWebGLRenderer] useEffect triggered - initializing WebGL');
     const canvas = canvasRef.current;
     const video = videoRef.current;
     if (!canvas || !video) return;
@@ -296,65 +304,26 @@ export function useWebGLRenderer({
     window.addEventListener("resize", updateBuffers);
          if (video) video.addEventListener("loadedmetadata", updateBuffers);
 
-    // Beat-to-time conversion helpers
-    const getCurrentBeat = (clipId: string, currentTime: number): number => {
-      const startTime = clipStartTimes[clipId];
-      if (!startTime) return 0;
-      
-      const elapsedTime = currentTime - startTime;
-      return (elapsedTime * bpm) / 60;
-    };
-
-    const getActiveClipEffects = (currentTime: number): Record<ShaderEffect, boolean> => {
-      const clipEffects: Record<ShaderEffect, boolean> = Object.values(ShaderEffect).reduce(
-        (effects, effect) => {
-          effects[effect] = false;
-          return effects;
-        },
-        {} as Record<ShaderEffect, boolean>
-      );
-
-      // Process each playing clip
-      Object.keys(playingClips).forEach(clipId => {
-        if (!playingClips[clipId]) return;
-
-        const clip = clips.find(c => c.id === clipId);
-        if (!clip) return;
-
-        const currentBeat = getCurrentBeat(clipId, currentTime);
-        
-        // Check if we need to loop the clip
-        const clipLength = Math.max(...clip.instructions.map(inst => inst.startBeat + inst.lengthBeats));
-        
-        let effectiveBeat = currentBeat;
-        if (loopClips[clipId] && currentBeat > clipLength) {
-          effectiveBeat = currentBeat % clipLength;
-        } else if (currentBeat > clipLength) {
-          // Clip finished and not looping - stop it
-          onClipFinished(clipId);
-          return;
-        }
-
-        // Check each instruction in the clip
-        clip.instructions.forEach(instruction => {
-          const { effect, startBeat, lengthBeats } = instruction;
-          const endBeat = startBeat + lengthBeats;
-          
-          if (effectiveBeat >= startBeat && effectiveBeat < endBeat) {
-            clipEffects[effect] = true;
-          }
-        });
-      });
-
-      return clipEffects;
-    };
-
     // Render function
     let videoFrameCallbackId: number;
+    let frameCount = 0;
+    let lastLogTime = performance.now();
+
     function renderFrame(now: DOMHighResTimeStamp) {
       if (!gl || !video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
         videoFrameCallbackId = video?.requestVideoFrameCallback(renderFrame) || 0;
         return;
+      }
+
+      frameCount++;
+      const currentTime = performance.now();
+
+      // Log every 120 frames (~2 seconds at 60fps) to avoid spam
+      if (frameCount % 120 === 0) {
+        const timeSinceLastLog = currentTime - lastLogTime;
+        const fps = (120 / timeSinceLastLog) * 1000;
+        console.log(`[useWebGLRenderer] Rendered ${frameCount} frames total, current FPS: ${fps.toFixed(1)}`);
+        lastLogTime = currentTime;
       }
 
       // Performance tracking - mark frame start
@@ -365,18 +334,8 @@ export function useWebGLRenderer({
       gl.bindTexture(gl.TEXTURE_2D, videoTextureRef.current);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, video);
 
-      // Get clip effects based on current beat timing
-      const currentTime = now / 1000;
-      const clipEffects = getActiveClipEffects(currentTime);
-
-      // Merge manual effects with clip effects (OR operation - either can activate an effect)
-      const combinedEffects = Object.values(ShaderEffect).reduce((combined, effect) => {
-        combined[effect] = activeEffects[effect] || clipEffects[effect];
-        return combined;
-      }, {} as Record<ShaderEffect, boolean>);
-
       // Get active effects in order
-      const activeEffectsList = Object.values(ShaderEffect).filter(effect => combinedEffects[effect]);
+      const activeEffectsList = Object.values(ShaderEffect).filter(effect => activeEffects[effect]);
       
       let currentTexture = videoTextureRef.current;
       let currentRenderTarget = 0;
@@ -558,11 +517,7 @@ export function useWebGLRenderer({
     activeEffects,
     effectIntensities,
     inputSource,
-    playingClips,
-    loopClips,
-    clipStartTimes,
     bpm,
-    onClipFinished,
     canvasRef,
     onRenderPerformance,
     videoRef,

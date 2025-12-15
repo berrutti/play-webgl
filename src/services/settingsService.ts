@@ -5,7 +5,6 @@ const STORAGE_KEYS = {
   MUTED: 'play-webgl-muted',
   INPUT_SOURCE: 'play-webgl-inputSource',
   ACTIVE_EFFECTS: 'play-webgl-activeEffects',
-  LOOP_CLIPS: 'play-webgl-loopClips',
   BPM: 'play-webgl-bpm',
 } as const;
 
@@ -14,7 +13,6 @@ export interface AppSettings {
   isMuted: boolean;
   inputSource: string;
   activeEffects: Record<ShaderEffect, boolean>;
-  loopClips: Record<string, boolean>;
   bpm: number;
 }
 
@@ -39,9 +37,6 @@ export const settingsService = {
 
       const activeEffects = localStorage.getItem(STORAGE_KEYS.ACTIVE_EFFECTS);
       if (activeEffects) settings.activeEffects = JSON.parse(activeEffects);
-
-      const loopClips = localStorage.getItem(STORAGE_KEYS.LOOP_CLIPS);
-      if (loopClips) settings.loopClips = JSON.parse(loopClips);
 
       const bpm = localStorage.getItem(STORAGE_KEYS.BPM);
       if (bpm) settings.bpm = JSON.parse(bpm);
@@ -83,15 +78,6 @@ export const settingsService = {
       localStorage.setItem(STORAGE_KEYS.ACTIVE_EFFECTS, JSON.stringify(value));
     } catch (error) {
       console.warn('Failed to save activeEffects setting:', error);
-    }
-  },
-
-
-  saveLoopClips(value: Record<string, boolean>): void {
-    try {
-      localStorage.setItem(STORAGE_KEYS.LOOP_CLIPS, JSON.stringify(value));
-    } catch (error) {
-      console.warn('Failed to save loopClips setting:', error);
     }
   },
 

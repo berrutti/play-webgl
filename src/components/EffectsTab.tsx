@@ -11,6 +11,8 @@ interface EffectsTabProps {
   midiConnected?: boolean;
   midiDeviceName?: string;
   isPopupMode?: boolean;
+  bpm: number;
+  isSettingBpm: boolean;
 }
 
 export const EffectsTab: React.FC<EffectsTabProps> = ({
@@ -23,6 +25,8 @@ export const EffectsTab: React.FC<EffectsTabProps> = ({
   midiConnected = false,
   midiDeviceName = '',
   isPopupMode = false,
+  bpm,
+  isSettingBpm,
 }) => {
   // Get effects controlled by MIDI knobs
   const getMidiControlledEffects = (): ShaderEffect[] => {
@@ -163,6 +167,13 @@ export const EffectsTab: React.FC<EffectsTabProps> = ({
 
   return (
     <div className="tab-content">
+      <div className="control-group">
+        <label className="control-label">
+          BPM: {bpm} {isSettingBpm && "🎵"}
+        </label>
+        <p className="control-description">Press spacebar to tap tempo</p>
+      </div>
+
       {midiConnected && (
         <div className="midi-status">
           <div className="control-group">

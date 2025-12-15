@@ -1,6 +1,6 @@
-# play-webl
+# play-webgl
 
-A WebGL webapp to process live video or VODs with shaders and clips:
+A WebGL webapp to process live video or VODs with real-time shader effects:
 
 https://berrutti.github.io/play-webgl/
 

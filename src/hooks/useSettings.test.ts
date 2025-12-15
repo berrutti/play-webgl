@@ -9,17 +9,11 @@ vi.mock('../services/settingsService', () => ({
     saveShowHelp: vi.fn(),
     saveMuted: vi.fn(),
     saveInputSource: vi.fn(),
-    saveLoopClips: vi.fn(),
     saveBpm: vi.fn(),
   },
 }));
 
 describe('useSettings', () => {
-  const initialLoopClips = {
-    '1': false,
-    '2': false,
-    '3': true,
-  };
 
   beforeEach(() => {
     vi.mocked(settingsService.loadSettings).mockReturnValue({});
@@ -30,12 +24,11 @@ describe('useSettings', () => {
   });
 
   it('should initialize with default values', () => {
-    const { result } = renderHook(() => useSettings(initialLoopClips));
+    const { result } = renderHook(() => useSettings());
 
     expect(result.current.showHelp).toBe(true);
     expect(result.current.isMuted).toBe(false);
     expect(result.current.inputSource).toBe('webcam');
-    expect(result.current.loopClips).toEqual(initialLoopClips);
     expect(result.current.bpm).toBe(120);
   });
 
@@ -43,22 +36,20 @@ describe('useSettings', () => {
     const savedSettings = {
       showHelp: false,
       isMuted: true,
-      loopClips: { '1': true, '2': false },
       bpm: 140,
     };
 
     vi.mocked(settingsService.loadSettings).mockReturnValue(savedSettings);
 
-    const { result } = renderHook(() => useSettings(initialLoopClips));
+    const { result } = renderHook(() => useSettings());
 
     expect(result.current.showHelp).toBe(false);
     expect(result.current.isMuted).toBe(true);
-    expect(result.current.loopClips).toEqual({ '1': true, '2': false });
     expect(result.current.bpm).toBe(140);
   });
 
   it('should update showHelp and save to settingsService', async () => {
-    const { result } = renderHook(() => useSettings(initialLoopClips));
+    const { result } = renderHook(() => useSettings());
 
     vi.mocked(settingsService.saveShowHelp).mockClear();
 
@@ -74,7 +65,7 @@ describe('useSettings', () => {
   });
 
   it('should update isMuted and save to settingsService', async () => {
-    const { result } = renderHook(() => useSettings(initialLoopClips));
+    const { result } = renderHook(() => useSettings());
 
     vi.mocked(settingsService.saveMuted).mockClear();
 
@@ -90,7 +81,7 @@ describe('useSettings', () => {
   });
 
   it('should update inputSource and save to settingsService', async () => {
-    const { result } = renderHook(() => useSettings(initialLoopClips));
+    const { result } = renderHook(() => useSettings());
 
     vi.mocked(settingsService.saveInputSource).mockClear();
 
@@ -105,26 +96,8 @@ describe('useSettings', () => {
     });
   });
 
-  it('should update loopClips and save to settingsService', async () => {
-    const { result } = renderHook(() => useSettings(initialLoopClips));
-
-    vi.mocked(settingsService.saveLoopClips).mockClear();
-
-    const newLoopClips = { '1': true, '2': true, '3': false };
-
-    act(() => {
-      result.current.setLoopClips(newLoopClips);
-    });
-
-    expect(result.current.loopClips).toEqual(newLoopClips);
-
-    await vi.waitFor(() => {
-      expect(settingsService.saveLoopClips).toHaveBeenCalledWith(newLoopClips);
-    });
-  });
-
   it('should update bpm and save to settingsService', async () => {
-    const { result } = renderHook(() => useSettings(initialLoopClips));
+    const { result } = renderHook(() => useSettings());
 
     vi.mocked(settingsService.saveBpm).mockClear();
 
@@ -149,10 +122,9 @@ describe('useSettings', () => {
     vi.mocked(settingsService.saveShowHelp).mockClear();
     vi.mocked(settingsService.saveMuted).mockClear();
     vi.mocked(settingsService.saveInputSource).mockClear();
-    vi.mocked(settingsService.saveLoopClips).mockClear();
     vi.mocked(settingsService.saveBpm).mockClear();
 
-    renderHook(() => useSettings(initialLoopClips));
+    renderHook(() => useSettings());
 
     // Wait for all effects to complete
     await new Promise(resolve => setTimeout(resolve, 10));
@@ -165,12 +137,11 @@ describe('useSettings', () => {
   });
 
   it('should provide setter functions', () => {
-    const { result } = renderHook(() => useSettings(initialLoopClips));
+    const { result } = renderHook(() => useSettings());
 
     expect(typeof result.current.setShowHelp).toBe('function');
     expect(typeof result.current.setIsMuted).toBe('function');
     expect(typeof result.current.setInputSource).toBe('function');
-    expect(typeof result.current.setLoopClips).toBe('function');
     expect(typeof result.current.setBpm).toBe('function');
   });
 });

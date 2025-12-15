@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { ShaderEffect, shaderEffects } from "../utils";
 import {
   createInitialTransitions,
@@ -34,14 +34,14 @@ export const useEffectTransitions = (
   const [isInitialized, setIsInitialized] = useState(false);
   const lastToggleTime = useRef<Record<string, number>>({});
 
-  const renderingEffects: Record<ShaderEffect, boolean> = Object.fromEntries(
+  const renderingEffects: Record<ShaderEffect, boolean> = useMemo(() => Object.fromEntries(
     Object.values(ShaderEffect).map(effect => [
       effect,
       effectTransitions[effect].isActive
     ])
-  ) as Record<ShaderEffect, boolean>;
+  ) as Record<ShaderEffect, boolean>, [effectTransitions]);
 
-  const renderingIntensities: Record<ShaderEffect, number> = Object.fromEntries(
+  const renderingIntensities: Record<ShaderEffect, number> = useMemo(() => Object.fromEntries(
     Object.values(ShaderEffect).map(effect => {
       const transition = effectTransitions[effect];
       const effectDef = shaderEffects[effect];
@@ -53,7 +53,7 @@ export const useEffectTransitions = (
 
       return [effect, transition.currentIntensity * userIntensity];
     })
-  ) as Record<ShaderEffect, number>;
+  ) as Record<ShaderEffect, number>, [effectTransitions, effectIntensities]);
 
   useEffect(() => {
     let animationFrameId: number;
@@ -66,6 +66,8 @@ export const useEffectTransitions = (
 
         if (hasActiveTransitions(newTransitions)) {
           animationFrameId = requestAnimationFrame(animate);
+        } else {
+          console.log('[useEffectTransitions] Animation loop stopped - no active transitions');
         }
 
         return newTransitions;
@@ -73,6 +75,7 @@ export const useEffectTransitions = (
     }
 
     if (hasActiveTransitions(effectTransitions)) {
+      console.log('[useEffectTransitions] Starting animation loop');
       animationFrameId = requestAnimationFrame(animate);
     }
 
@@ -145,7 +148,7 @@ export const useEffectTransitions = (
     [activeEffects]
   );
 
-  return {
+  return useMemo(() => ({
     activeEffects,
     effectIntensities,
     renderingEffects,
@@ -153,5 +156,5 @@ export const useEffectTransitions = (
     handleIntensityChange,
     handleToggleEffect,
     setEffectIntensities,
-  };
+  }), [activeEffects, effectIntensities, renderingEffects, renderingIntensities, handleIntensityChange, handleToggleEffect, setEffectIntensities]);
 };

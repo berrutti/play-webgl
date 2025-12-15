@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, RefObject } from "react";
+import { useState, useCallback, useEffect, useMemo, RefObject } from "react";
 
 const VIDEO_LOAD_DELAY_MS = 100;
 
@@ -260,7 +260,7 @@ export const useVideoPlaylist = (
     setIsSeeking(false);
   }, []);
 
-  return {
+  return useMemo(() => ({
     videoPlaylist,
     selectedVideoIndex,
     loadedVideoIndex,
@@ -282,5 +282,5 @@ export const useVideoPlaylist = (
     handleSeek,
     handleSeekStart,
     handleSeekEnd,
-  };
+  }), [videoPlaylist, selectedVideoIndex, loadedVideoIndex, isVideoPlaying, videoPausedManually, isSeeking, setVideoPlaylist, setSelectedVideoIndex, setLoadedVideoIndex, setIsVideoPlaying, handleVideoSelect, handleVideoPlayPause, handleNextVideo, handlePreviousVideo, handleAddVideosToPlaylist, handleRemoveFromPlaylist, handleSeek, handleSeekStart, handleSeekEnd]);
 };

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { WebMidi, Input, Output } from 'webmidi';
 import { ShaderEffect } from '../utils';
 
@@ -163,8 +163,8 @@ export const useMidi = (config: MidiConfig): MidiState => {
     return disconnect;
   }, [initialize, disconnect]);
 
-  return {
+  return useMemo(() => ({
     connected,
     deviceName,
-  };
+  }), [connected, deviceName]);
 }; 
